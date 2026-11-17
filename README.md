@@ -1,7 +1,7 @@
 # Crowd Escape Simulation (MATLAB)
 
 A small simulation of people trying to get out of a crowded room through an exit.
-We run it three times (calm, active, panicked crowd) and compare how well people
+This is ran three times across three different scenarios and compare how well people
 get out, how fast they move, and how badly they get squished.
 
 ---
@@ -65,7 +65,7 @@ v0 = 1.3;                     % desired walking speed (m/s)
 
 The grid is **only used to place people at the start**. It does not affect the movement.
 
-**Watch out for the index convention:**
+**Watch out for the index convention, the i is the row and the j is the column. So, think (y,x):**
 - `i` is the **row** and controls **y** (counts upward)
 - `j` is the **column** and controls **x** (counts rightward)
 
@@ -275,7 +275,7 @@ ang = panicArr .* pi .* randn(N,1);   % random angle, bigger when panic is bigge
 - Panic 0.8 gives a typical angle of about 0.8 x pi = 144 degrees. That is a *huge* swing.
 - A new random angle is drawn **every time step**.
 
-Rotating an arrow `(x, y)` by angle `a` uses the standard rotation formula:
+Rotating an arrow `(x, y)` by angle `a` uses the standard rotation formula. This is obtained by adding the original angle theta with the jitter angle. The rotation formula is derived from the angle addition identities:
 
 ```
 x' = x*cos(a) - y*sin(a)
@@ -301,23 +301,6 @@ x' = 0.929*0.8776 - 0.370*0.4794 = 0.638
 y' = 0.929*0.4794 + 0.370*0.8776 = 0.770
 -> new angle = 21.7 + 28.65 = 50.4 degrees, length still 1
 ```
-
-> **Heads-up (a bug in the current code):** the two lines of code are written
-> one after the other,
-> ```matlab
-> dirX = ca.*dirX - sa.*dirY;
-> dirY = sa.*dirX + ca.*dirY;    % uses the NEW dirX, not the original
-> ```
-> so the second line uses the already-rotated `dirX`. The result is no longer a
-> clean rotation (the arrow's length is not 1 anymore). The fix is to save the old
-> values first:
-> ```matlab
-> newX = ca.*dirX - sa.*dirY;
-> newY = sa.*dirX + ca.*dirY;
-> dirX = newX;  dirY = newY;
-> ```
-> The simulation still runs without the fix, but the panic wobble is slightly
-> different from what the math above describes.
 
 ### Step 2: people push each other apart
 
@@ -392,7 +375,7 @@ Calm-crowd force for case B (`A_social = 2`):
   1.0        0.38   ####
 ```
 
-Finally, the two people are pushed in **opposite** directions (Newton's third law):
+Finally, the two people are pushed in **opposite** directions (Newton's third law). To clear confusion, think i and j as two agents:
 
 ```matlab
 Fx(i) = Fx(i) - mag*ux;   Fy(i) = Fy(i) - mag*uy;   % i is pushed AWAY from j
@@ -414,7 +397,7 @@ Example: `i` at `(2, 3)`, `j` at `(2.4, 3)`, panic 0.5:
      <- o       o ->
 ```
 
-Note: in `Fx(j)`, the `j` is the *person's number*, not a y-coordinate.
+Reminder: in `Fx(j)`, the `j` is the *person's number*, not a y-coordinate.
 
 ### Step 3: update velocity and position
 
@@ -462,7 +445,7 @@ if any(reached)
 end
 ```
 
-Anyone with `x >= 9.8` is considered escaped and is deleted from all three lists.
+Anyone with `x >= 9.8` or is close to the exit is considered escaped and is deleted from all three lists. We can update this to be more realistic once we factor in exit width.
 
 ```
                       exit zone
@@ -471,10 +454,6 @@ Anyone with `x >= 9.8` is considered escaped and is deleted from all three lists
                       |
 ```
 
-> **Heads-up:** the code only checks `x`, not `y`. So the "exit" is effectively the
-> **entire right wall**, not a door at `y = 5`. People aim at `(10, 5)`, but anyone
-> touching the right side anywhere gets out. If you want a real door, also require
-> something like `abs(pos(:,2) - exitY) < doorWidth/2`.
 
 ### Step 5: measuring the crowd
 
@@ -577,7 +556,7 @@ people should escape within 15 seconds.
 
 ---
 
-## Quick reference
+## Math used 
 
 | What                | Code                                  | In plain words                         |
 |---------------------|---------------------------------------|----------------------------------------|
