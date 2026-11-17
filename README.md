@@ -5,7 +5,7 @@ This is ran three times across three different scenarios and compare how well pe
 get out, how fast they move, and how badly they get squished.
 
 ---
-##TLDR 
+## TLDR 
 - This code covers the formation of the environment or setting, which is grid based. Each grid contains up to n numbers of people, depending on the threshold. Within each cell the agents have their positions and this code generates it.
 - The code also simulates their movement within 300 time steps. Ideally this one covers their movement toward the exit. The panic levels influence how organized or directed (polarity) the movement is by adding a jitter or offsets to the initial angle of movement. The movement is calculated here to be moving to the exit by default. So a simple SOHCAHTOA formula is used. We do not factor in if the agent decides to go around or take alternative routes. The assumption here is that a higher panic level (usually in tighter scenarios) lead to disorganized movement. In this code, the higher panic level is with the critically packed scenario. We may instead try three panic levels per each density level if we have time.
 - This code also models contact forces (linear spring, Hooke's law. I might read up on some literature next time on different formulas used if possible), which is essential in knowing repulsion contact or who gets stuck. This also influences if people get stuck in the walls, how their movements are restricted, and if they make it to the exit.
