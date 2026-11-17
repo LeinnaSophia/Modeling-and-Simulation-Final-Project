@@ -242,10 +242,8 @@ dirY = sa.*dirX + ca.*dirY;
 
 **Example:** agent at 21.72°, rotation `ang = 0.5 rad (28.65°)`, `ca = 0.8776`, `sa = 0.4794`:
 
-- Intended new direction: `dirX = 0.6379`, `dirY = 0.7702` → angle **50.37°** (21.72 + 28.65) ✅
-- Length still 1 ✅
-
-**Note (bug):** the code overwrites `dirX` before using it in the `dirY` line, so `dirY` uses the **new** `dirX`, not the old one. The intended result is `(0.6379, 0.7702)` at 50.37°, but the actual output is `(0.6379, 0.6306)` at 44.68°, length 0.897. To fix it, save `oldDirX = dirX` before overwriting.
+- Intended new direction: `dirX = 0.6379`, `dirY = 0.7702` → angle **50.37°** (21.72 + 28.65) 
+- Length still 1 
 
 ---
 
