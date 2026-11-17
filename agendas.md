@@ -1,4 +1,4 @@
-# Next Agendas
+# Agendas
 
 ## TLDR/Expected Deliverables:
 - Working code
