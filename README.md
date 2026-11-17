@@ -1,21 +1,59 @@
+# Crowd Escape Simulation (MATLAB)
 
-
-## What the code means
-
-The simulation models **people (agents) trying to escape a 10m × 10m room** through an exit on the right wall. It runs **three scenarios** (calm, active, panicked) and measures how the crowd behaves.
-
-Each agent has:
-- A **position** `(x, y)`
-- A **velocity** `(vx, vy)`
-- A **panic level** (0 = calm, 1 = max panic)
-
-The loop does 300 time steps of 0.05 seconds each (15 seconds total). Every step, agents move toward the exit, push away from each other, and get removed if they escape.
+A small simulation of people trying to get out of a crowded room through an exit.
+We run it three times (calm, active, panicked crowd) and compare how well people
+get out, how fast they move, and how badly they get squished.
 
 ---
 
-## Section 1: Setup — room, grid, exit
+## The idea in one minute
 
-*Sets the room dimensions, grid size, exit location, and desired walking speed.*
+- The room is a **10 m x 10 m square**.
+- People ("agents") are scattered randomly across the room.
+- Everyone wants to walk toward the **exit on the right wall** at about 1.3 m/s.
+- While walking, people **push each other apart** (nobody can stand inside someone else).
+- Panicked people **wander off course** and **push harder**.
+- When someone reaches the exit, they are **removed** from the simulation.
+- We run **300 steps of 0.05 s = 15 seconds** and record what happened.
+
+Each agent is just three things:
+
+| Property   | Stored in  | Meaning                              |
+|------------|------------|--------------------------------------|
+| position   | `pos`      | `(x, y)` in meters                   |
+| velocity   | `vel`      | `(vx, vy)` in m/s                    |
+| panic      | `panicArr` | 0 = calm ... 1 = maximum panic       |
+
+---
+
+## 1. The room and the grid
+
+```
+ y
+10 +---+---+---+---+---+---+---+---+---+---+
+   |   |   |   |   |   |   |   |   |   |   |  i = 10
+ 9 +---+---+---+---+---+---+---+---+---+---+
+   |   |   |   |   |   |   |   |   |   |   |  i = 9
+ 8 +---+---+---+---+---+---+---+---+---+---+
+   |   |   |   |   |   |   |   |   |   |   |  i = 8
+ 7 +---+---+---+---+---+---+---+---+---+---+
+   |   |   |   |   |   |   |   |   |   |   |  i = 7
+ 6 +---+---+---+---+---+---+---+---+---+---+
+   |   |   |   |   |   |   |   |   |   |   |  i = 6
+ 5 +---+---+---+---+---+---+---+---+---+---+ <== EXIT at (10, 5)
+   |   |   |   |   |   |   |   |   |   |   |  i = 5
+ 4 +---+---+---+---+---+---+---+---+---+---+
+   |   |   |   |   |   |   |   |   |   |   |  i = 4
+ 3 +---+---+---+---+---+---+---+---+---+---+
+   |   |   |   |   |   |   |   |   |   |   |  i = 3
+ 2 +---+---+---+---+---+---+---+---+---+---+
+   |   |   |   |   |   |   |   |   |   |   |  i = 2
+ 1 +---+---+---+---+---+---+---+---+---+---+
+   |   |   |   |   |   |   |   |   |   |   |  i = 1
+ 0 +---+---+---+---+---+---+---+---+---+---+
+   0   1   2   3   4   5   6   7   8   9  10   x
+     j=1 j=2 j=3 j=4 j=5 j=6 j=7 j=8 j=9 j=10
+```
 
 ```matlab
 L = 10; W = 10;               % room is 10m x 10m
@@ -25,58 +63,63 @@ exitX = L; exitY = W/2;       % exit at right wall, middle
 v0 = 1.3;                     % desired walking speed (m/s)
 ```
 
-**What this means:**
+The grid is **only used to place people at the start**. It does not affect the movement.
 
-- The room is 10×10 metres, split into 10×10 = **100 cells**, each **1m × 1m**.
-- `dx = 1`, `dy = 1` — each cell is 1 metre wide and tall.
-- The exit is at `(10, 5)` — the middle of the right wall.
-- `v0 = 1.3 m/s` — everyone *wants* to walk at this speed.
+**Watch out for the index convention:**
+- `i` is the **row** and controls **y** (counts upward)
+- `j` is the **column** and controls **x** (counts rightward)
 
-**Grid convention (important):**
-- `i` = row number (counts **up**, drives **y**)
-- `j` = column number (counts **right**, drives **x**)
+So cell `(i, j)` covers `x` from `j-1` to `j`, and `y` from `i-1` to `i`:
 
-So cell `(i, j)` covers `x ∈ [(j-1), j]` and `y ∈ [(i-1), i]`.
+```
+          x = j-1        x = j
+             |             |
+  y = i  ----+-------------+----
+             |             |
+             |   cell      |
+             |   (i, j)    |
+             |             |
+  y = i-1 ---+-------------+----
+```
 
 ---
 
-## Section 2: Scenarios
+## 2. The three scenarios
 
-*Defines three test cases with different crowd densities and panic levels.*
+Each scenario is a row of `[min people per cell, max people per cell, panic]`.
 
 ```matlab
 panicLevels = [0.0, 0.5, 0.8];
 
 scenarioSettings = [
-    1  3  panicLevels(1);    % Baseline: <4 ppl/m^2, calm
-    4  4  panicLevels(2);    % Active:   =4 ppl/m^2, active
-    6 10  panicLevels(3);    % Erratic:  6+ ppl/m^2, erratic
+    1  3  panicLevels(1);    % Baseline
+    4  4  panicLevels(2);    % Active
+    6 10  panicLevels(3);    % Erratic
 ];
 ```
 
-Each row is `[min agents per cell, max agents per cell, panic level]`:
+| Scenario | People per cell | Approx. density | Panic | Feel                   |
+|----------|-----------------|-----------------|-------|------------------------|
+| Baseline | 1 to 3          | about 2 / m^2   | 0.0   | calm, sparse           |
+| Active   | exactly 4       | 4 / m^2         | 0.5   | busy, a bit anxious    |
+| Erratic  | 6 to 10         | about 8 / m^2   | 0.8   | packed, very panicked  |
 
-| Scenario | Agents per cell | Panic | Meaning |
-|---|---|---|---|
-| Baseline | 1 to 3 | 0.0 | calm, sparse |
-| Active | exactly 4 | 0.5 | dense, moderately panicked |
-| Erratic | 6 to 10 | 0.8 | very dense, highly panicked |
-
-The `randi([min, max])` in the placement loop uses these to decide how many agents go in each cell.
+Since each cell is 1 m^2, "people per cell" is the same as "people per m^2".
 
 ---
 
-## Section 3: Placing agents
+## 3. Placing the agents
 
-*Scatters agents randomly inside each of the 100 grid cells, building the initial position, velocity, and panic lists.*
+For each of the 100 cells we pick a random head count `n`, then drop `n` people at
+random spots inside that cell.
 
 ```matlab
 for i = 1:nx
     for j = 1:ny
-        n = randi([perCellMin, perCellMax]);
+        n = randi([perCellMin, perCellMax]);   % how many people in this cell
         nPerCell(i,j) = n;
 
-        cellX0 = (j-1)*dx;
+        cellX0 = (j-1)*dx;                     % cell's bottom-left corner
         cellY0 = (i-1)*dy;
 
         newPos = [cellX0 + rand(n,1)*dx,  cellY0 + rand(n,1)*dy];
@@ -87,306 +130,293 @@ for i = 1:nx
 end
 ```
 
-**What happens, cell by cell (100 cells):**
+Picture one cell with `n = 3`. `rand(n,1)` gives 3 random numbers between 0 and 1,
+one per person, which we scale to the cell size and shift to the cell's corner:
 
-1. **Pick `n`** — a random number of agents for this cell.
-2. **Find the cell's corner**: `cellX0 = (j-1)*dx`, `cellY0 = (i-1)*dy`.
-3. **Place `n` agents inside the cell**:
-   - `rand(n,1)` returns **n random numbers** (one per agent).
-   - `cellX0 + rand(n,1)*dx` = a random x inside the cell.
-   - `cellY0 + rand(n,1)*dy` = a random y inside the cell.
-   - `newPos` is an **n × 2** matrix — one row per agent.
-4. **Append to the lists**:
-   - `pos = [pos; newPos]` → add the n new positions.
-   - `vel = [vel; zeros(n,2)]` → n new agents with **zero velocity**.
-   - `panicArr = [panicArr; panicLevel*ones(n,1)]` → n new agents with the scenario's panic.
+```
+  cellY0+1 +-----------------+
+           |        o        |
+           |   o             |
+           |             o   |
+  cellY0   +-----------------+
+         cellX0           cellX0+1
+```
 
-**Key idea:** `rand(n,1)` is a **column of n numbers**, so each agent gets its own random position. No inner loop needed.
+After the loops, there is one row per person in each list:
 
-**After all 100 cells**, the three lists all have **N rows** (one per agent):
-- `pos` → N × 2 (positions)
-- `vel` → N × 2 (velocities, all zero)
-- `panicArr` → N × 1 (panic levels, all equal)
+```
+  pos       N x 2    [ x  y ]      where everyone is
+  vel       N x 2    [ vx vy ]     all zeros at the start (nobody is moving yet)
+  panicArr  N x 1    [ p ]         same panic for everyone in a scenario
+```
+
+### Counting
+
+```matlab
+N  = size(pos,1);              % people currently in the room (shrinks as people leave)
+N0 = N;                        % people at the start (frozen)
+density0 = N0 / (L*W);         % starting people per m^2
+```
+
+We keep `N0` because `N` goes down as people escape, and we need the original
+number later: `escaped fraction = (N0 - N) / N0`.
+
+### Where we save results over time
+
+```matlab
+speedHist = zeros(nSteps,1);   % average speed at each step
+compHist  = zeros(nSteps,1);   % body overlap at each step
+polarHist = zeros(nSteps,1);   % direction alignment at each step
+restrHist = zeros(nSteps,1);   % fraction nearly stuck at each step
+```
+
+Four empty columns of 300 slots. Slot `k` holds the value at time step `k`.
 
 ---
 
-## Section 4: Counts and density
+## 4. The main loop: what happens in ONE time step
 
-*Locks in the total agent count, a frozen starting count, and the starting density.*
-
-```matlab
-N  = size(pos,1);              % total agents
-N0 = N;                        % frozen starting count
-density0 = N0 / (L*W);         % starting density
+```
+  +---------------------------------------------------+
+  |  1. Everyone picks a direction toward the exit    |
+  |     (panicked people get a random wobble)         |
+  +---------------------------------------------------+
+                          |
+                          v
+  +---------------------------------------------------+
+  |  2. Every close pair of people pushes each other  |
+  |     apart  ->  a force on each person             |
+  +---------------------------------------------------+
+                          |
+                          v
+  +---------------------------------------------------+
+  |  3. Update velocity (steer + forces), then move   |
+  +---------------------------------------------------+
+                          |
+                          v
+  +---------------------------------------------------+
+  |  4. Keep people inside the walls                  |
+  |     Remove anyone who reached the exit            |
+  +---------------------------------------------------+
+                          |
+                          v
+  +---------------------------------------------------+
+  |  5. Measure the crowd (speed, stuck, aligned,     |
+  |     squished) and store it in the history arrays  |
+  +---------------------------------------------------+
+                          |
+                          v
+                  repeat 300 times
 ```
 
-- **`N`** = number of rows in `pos` = total agents.
-- **`N0`** = a **copy** of `N`, taken **before anyone escapes**. `N` shrinks later, but `N0` stays fixed.
-- **`density0`** = `N0 / 100 m²` = starting agents per square metre.
-
-**Why keep `N0`:** to compute the escaped fraction later: `(N0 - N) / N0`.
-
----
-
-## Section 5: History arrays
-
-*Pre-allocates one storage slot per time step for each of the four metrics.*
-
-```matlab
-speedHist = zeros(nSteps,1);
-compHist  = zeros(nSteps,1);
-polarHist = zeros(nSteps,1);
-restrHist = zeros(nSteps,1);
-```
-
-Four **300 × 1** columns. Each slot `k` will hold one metric at time step `k`:
-
-- `speedHist(k)` = average crowd speed
-- `compHist(k)` = average body overlap
-- `polarHist(k)` = direction alignment
-- `restrHist(k)` = fraction nearly stuck
-
----
-
-## Section 6: The simulation loop — one step at a time
-
-*Begins the 300-step time loop; each iteration advances the crowd by 0.05 s.*
-
-```matlab
-for k = 1:nSteps
-```
-
-`k` = time step number (1 → 300). Each iteration is `dt = 0.05 s`.
-
-### Guard: everyone escaped
-
-*If no agents remain, fills the remaining history slots with the last real value and stops the loop early.*
+If the room empties early, the loop stops and the remaining history slots are filled
+with the last real value, so empty slots don't drag the averages down.
 
 ```matlab
 if N == 0
     if k > 1
-        speedHist(k:end) = speedHist(k-1);
+        speedHist(k:end) = speedHist(k-1);   % copy last real value forward
         ...
     end
     break;
 end
 ```
 
-If no agents remain, fill the remaining history slots with the **last real value** (so averages aren't dragged down by zeros), then **stop the loop**.
+### Step 1: aim at the exit
 
-`if k > 1` is a safety check: on step 1, there's no `k-1` to copy from.
+For each person we want a **direction arrow of length 1** pointing at the exit.
 
----
-
-## Section 7: Aim at the exit (with panic jitter)
-
-*Computes each agent's unit direction toward the exit, then rotates it by a random panic angle so panicked agents veer off-course.*
+```
+   exit (10, 5)
+        *
+       /|
+      / |
+     /  | toExitY = 3.86
+    /   |
+   /θ   |
+  o-----+
+  (0.31, 1.14)   toExitX = 9.69
+```
 
 ```matlab
-toExitX = exitX - pos(:,1);
-toExitY = exitY - pos(:,2);
-lenExit = sqrt(toExitX.^2 + toExitY.^2) + 1e-9;
-dirX = toExitX ./ lenExit;
+toExitX = exitX - pos(:,1);                    % horizontal distance to exit
+toExitY = exitY - pos(:,2);                    % vertical distance to exit
+lenExit = sqrt(toExitX.^2 + toExitY.^2) + 1e-9;   % straight-line distance
+dirX = toExitX ./ lenExit;                     % divide by length -> arrow of length 1
 dirY = toExitY ./ lenExit;
 ```
 
-**What this computes:** a **unit vector** from each agent to the exit.
+Worked example for the person at `(0.31, 1.14)`:
 
-1. **`toExitX, toExitY`** — the displacement from each agent to the exit. For an agent at `(0.31, 1.14)`: `toExitX = 10 - 0.31 = 9.69`, `toExitY = 5 - 1.14 = 3.86`.
-2. **`lenExit`** — straight-line distance (Pythagoras): `√(9.69² + 3.86²) = 10.43`. The `+1e-9` avoids divide-by-zero.
-3. **`dirX, dirY`** — the displacement divided by its length = **unit direction**.
+```
+toExitX = 10 - 0.31 = 9.69
+toExitY =  5 - 1.14 = 3.86
+lenExit = sqrt(9.69^2 + 3.86^2) = 10.43
 
-For the example: `dirX = 9.69 / 10.43 = 0.9290`, `dirY = 3.86 / 10.43 = 0.3701`.
-
-This is **SOHCAHTOA**:
-- `dirX = adjacent/hypotenuse = cos θ`
-- `dirY = opposite/hypotenuse = sin θ`
-
-The angle to the exit is `θ = arctan(3.86/9.69) = 21.72°`.
-
-**Length check:** `0.9290² + 0.3701² = 1.000` ✅
-
-### Panic jitter
-
-*Rotates each agent's heading by a random angle proportional to panic, so panicked agents wander instead of walking straight.*
-
-```matlab
-ang = panicArr .* pi .* randn(N,1);   % random rotation angle per agent
-ca  = cos(ang);
-sa  = sin(ang);
-dirX = ca.*dirX - sa.*dirY;
-dirY = sa.*dirX + ca.*dirY;
+dirX = 9.69 / 10.43 = 0.929     (this is cos θ)
+dirY = 3.86 / 10.43 = 0.370     (this is sin θ)
+θ = atan(3.86 / 9.69) = 21.7 degrees
 ```
 
-**Why:** panicked people don't walk straight — they veer. This **rotates** each agent's heading by a random angle.
+Dividing by the length is what "normalizes" the arrow: we only keep the *direction*,
+and handle the *speed* separately later. (`+1e-9` just prevents dividing by zero.)
 
-- **`randn(N,1)`** — a random number from a bell curve (most values between −2 and +2), one per agent.
-- **`ang`** — the rotation angle: `panic × π × randn`. Panic 0 → no rotation; panic 0.8 → large random angles (up to ~±144°).
-- **`ca, sa`** — cosine and sine of the rotation angle.
+### Panic wobble
 
-**The rotation formula** (from the angle-addition identities):
-
-$$
-x' = x\cos\alpha - y\sin\alpha
-$$
-$$
-y' = y\cos\alpha + x\sin\alpha
-$$
-
-which is exactly:
+Calm people walk straight. Panicked people veer. We **rotate** each person's arrow
+by a random angle:
 
 ```matlab
-dirX = ca.*dirX - sa.*dirY;
-dirY = sa.*dirX + ca.*dirY;
+ang = panicArr .* pi .* randn(N,1);   % random angle, bigger when panic is bigger
 ```
 
-**Example:** agent at 21.72°, rotation `ang = 0.5 rad (28.65°)`, `ca = 0.8776`, `sa = 0.4794`:
+- `randn` gives a random number from a bell curve (usually between -2 and +2).
+- Panic 0.0 gives an angle of 0, so no wobble.
+- Panic 0.8 gives a typical angle of about 0.8 x pi = 144 degrees. That is a *huge* swing.
+- A new random angle is drawn **every time step**.
 
-- Intended new direction: `dirX = 0.6379`, `dirY = 0.7702` → angle **50.37°** (21.72 + 28.65) 
-- Length still 1 
+Rotating an arrow `(x, y)` by angle `a` uses the standard rotation formula:
 
----
-
-## Section 8: Repulsion forces between agents
-
-*Computes pairwise pushing forces between nearby agents — a linear spring when bodies overlap, an exponential personal-space force when close but not touching.*
-
-```matlab
-Fx = zeros(N,1);
-Fy = zeros(N,1);
-A_social = 2.0 * (1 + mean(panicArr));
-B        = 0.3;
-k_body   = 50  * (1 + 2*mean(panicArr));
-r        = 0.25;
+```
+x' = x*cos(a) - y*sin(a)
+y' = x*sin(a) + y*cos(a)
 ```
 
-**Constants:**
+```
+              rotated arrow
+                  ^
+                 /
+                /   a
+               /  .--.
+              /  /
+             o------------> original arrow
+```
 
-| Variable | Value | Meaning |
-|---|---|---|
-| `r` | 0.25 m | body radius → `2r = 0.5 m` personal diameter |
-| `A_social` | 2.0 × (1 + mean panic) | strength of personal-space repulsion |
-| `B` | 0.3 m | how fast the social force decays with distance |
-| `k_body` | 50 × (1 + 2·mean panic) | stiffness of body-contact pushing |
+Example: the arrow at 21.7 degrees rotated by 0.5 rad (28.65 degrees):
 
-**Panic makes both forces stronger:** `A_social` scales by `(1 + mean panic)`, `k_body` by `(1 + 2·mean panic)`.
+```
+cos(0.5) = 0.8776    sin(0.5) = 0.4794
 
-**Note:** `A_social = 2.0` and `k_body = 50` are **hand-picked** values (the exponential form is from Helbing's social-force model; the panic scaling is a modeling choice).
+x' = 0.929*0.8776 - 0.370*0.4794 = 0.638
+y' = 0.929*0.4794 + 0.370*0.8776 = 0.770
+-> new angle = 21.7 + 28.65 = 50.4 degrees, length still 1
+```
 
-### The pair loop
+> **Heads-up (a bug in the current code):** the two lines of code are written
+> one after the other,
+> ```matlab
+> dirX = ca.*dirX - sa.*dirY;
+> dirY = sa.*dirX + ca.*dirY;    % uses the NEW dirX, not the original
+> ```
+> so the second line uses the already-rotated `dirX`. The result is no longer a
+> clean rotation (the arrow's length is not 1 anymore). The fix is to save the old
+> values first:
+> ```matlab
+> newX = ca.*dirX - sa.*dirY;
+> newY = sa.*dirX + ca.*dirY;
+> dirX = newX;  dirY = newY;
+> ```
+> The simulation still runs without the fix, but the panic wobble is slightly
+> different from what the math above describes.
 
-*Visits every unordered pair of agents exactly once.*
+### Step 2: people push each other apart
+
+First, some constants:
+
+| Variable   | Value                    | Meaning                                            |
+|------------|--------------------------|----------------------------------------------------|
+| `r`        | 0.25 m                   | body radius (so a person is 0.5 m wide)            |
+| `B`        | 0.3 m                    | how quickly the "personal space" push fades        |
+| `A_social` | `2.0 * (1 + mean panic)` | strength of the personal-space push                |
+| `k_body`   | `50 * (1 + 2*mean panic)`| stiffness when bodies actually overlap             |
+
+Higher panic means everyone shoves harder. The shape of the force (exponential,
+spring) comes from the well-known Helbing social-force model. The specific numbers
+(2.0, 50, how panic scales them) are hand-picked modeling choices.
+
+The code checks **every pair** of people once:
 
 ```matlab
 for i = 1:N
-    for j = i+1:N
+    for j = i+1:N          % j starts after i, so each pair is visited once
 ```
 
-Each **unordered pair** of agents is visited **once**. `j = i+1` avoids double-counting and skips self-pairs.
+For a pair `(i, j)`:
 
-### Geometry
+```
+  i                        j
+  o ---------------------> o
+  (x_i, y_i)               (x_j, y_j)
 
-*Computes the vector and distance between the two agents in the pair.*
-
-```matlab
-ddx  = pos(j,1) - pos(i,1);
-ddy  = pos(j,2) - pos(i,2);
-dist = sqrt(ddx^2 + ddy^2);
+  ddx = x_j - x_i
+  ddy = y_j - y_i
+  dist = sqrt(ddx^2 + ddy^2)
+  u = (ddx, ddy) / dist        <- arrow of length 1 pointing from i to j
 ```
 
-- `ddx, ddy` = vector **from i to j**.
-- `dist` = distance between them.
+We skip pairs that are exactly on top of each other (`dist > 0`, to avoid dividing
+by zero) or farther than 1 m apart (`dist < 1.0`, the push is tiny there anyway).
 
-### The cutoff
+Then the **size** of the push depends on how close they are:
 
-*Skips pairs that are too close (divide-by-zero risk) or too far (negligible force).*
-
-```matlab
-if dist > 0 && dist < 1.0
 ```
+  Case A: bodies overlap (dist < 0.5)        Case B: close, not touching (0.5 <= dist < 1.0)
 
-- `dist > 0` → skip coincident agents (avoids divide-by-zero).
-- `dist < 1.0` → beyond 1 m, the force is negligible; skip for speed.
+      (  o  )(  o  )                              (  o  )   (  o  )
+        i  <->  j                                   i  <---->  j
+        squished                                    personal space
 
-### Direction
-
-*Normalizes the pair vector to a unit vector pointing from i to j.*
-
-```matlab
-ux = ddx / dist;
-uy = ddy / dist;
+  Hard spring:                                 Soft exponential push:
+  mag = k_body * (0.5 - dist)                  mag = A_social * exp((0.5 - dist)/0.3)
 ```
-
-Unit vector from i to j (length 1).
-
-### The two force regimes
-
-*Chooses a linear spring for body contact, or an exponential personal-space force for close-but-not-touching agents.*
 
 ```matlab
 if dist < 2*r
-    mag = k_body * (2*r - dist);            % body contact
+    mag = k_body * (2*r - dist);            % body contact: linear spring
 else
-    mag = A_social * exp((2*r - dist)/B);   % social repulsion
+    mag = A_social * exp((2*r - dist)/B);   % personal space: exponential
 end
 ```
 
-**Case 1: `dist < 0.5`** (bodies overlap) — **linear spring**:
+Case A is like squeezing a spring: the more overlap, the harder it pushes back.
+Case B fades quickly: the force drops to about 37% every additional 0.3 m.
 
-$$
-\text{mag} = k_\text{body} \cdot (0.5 - \text{dist})
-$$
+Calm-crowd force for case B (`A_social = 2`):
 
-The more they overlap, the harder they push apart. `k_body = 50` is large because contact forces are strong.
-
-**Case 2: `0.5 ≤ dist < 1.0`** (close but not touching) — **exponential personal space**:
-
-$$
-\text{mag} = A_\text{social} \cdot e^{(0.5 - \text{dist})/0.3}
-$$
-
-`exp` is \(e^x\). When `dist` is small, the exponent is positive → large force. When `dist` is large, the exponent is negative → small force. `B = 0.3` sets the decay rate: every 0.3 m, the force drops by a factor of \(e \approx 2.72\).
-
-**Force vs distance** (with `A_social = 2`):
-
-| `dist` | `mag` |
-|---|---|
-| 0.5 | 2.00 |
-| 0.6 | 1.43 |
-| 0.7 | 1.03 |
-| 0.8 | 0.74 |
-| 1.0 | 0.38 |
-
-### Applying the force (Newton's third law)
-
-*Pushes the two agents apart with equal and opposite force.*
-
-```matlab
-Fx(i) = Fx(i) - mag*ux;   Fy(i) = Fy(i) - mag*uy;
-Fx(j) = Fx(j) + mag*ux;   Fy(j) = Fy(j) + mag*uy;
+```
+  dist (m)   mag
+  0.5        2.00   ########################
+  0.6        1.43   #################
+  0.7        1.03   ############
+  0.8        0.74   #########
+  1.0        0.38   ####
 ```
 
-`(ux, uy)` points **from i to j**. So:
+Finally, the two people are pushed in **opposite** directions (Newton's third law):
 
-- **Agent i** is pushed **opposite** to `(ux, uy)` → away from j (minus sign).
-- **Agent j** is pushed **along** `(ux, uy)` → away from i (plus sign).
+```matlab
+Fx(i) = Fx(i) - mag*ux;   Fy(i) = Fy(i) - mag*uy;   % i is pushed AWAY from j
+Fx(j) = Fx(j) + mag*ux;   Fy(j) = Fy(j) + mag*uy;   % j is pushed AWAY from i
+```
 
-Equal and opposite → momentum balanced.
+Example: `i` at `(2, 3)`, `j` at `(2.4, 3)`, panic 0.5:
 
-**Example:** i at `(2, 3)`, j at `(2.4, 3)`. `ddx = +0.4`, `ddy = 0`, `dist = 0.4`, `ux = +1`, `uy = 0`.
+```
+  i at x=2.0      j at x=2.4
+     o <-0.4-> o
+  dist = 0.4 (overlapping), u = (+1, 0)
+  k_body = 50 * (1 + 2*0.5) = 100
+  mag = 100 * (0.5 - 0.4) = 10
 
-With panic 0.5 (`k_body = 100`): `mag = 100 × (0.5 - 0.4) = 10`.
+  Fx(i) -= 10   -> i pushed left
+  Fx(j) += 10   -> j pushed right
 
-- `Fx(i) -= 10×1` → i pushed left
-- `Fx(j) += 10×1` → j pushed right
+     <- o       o ->
+```
 
-**Note:** `j` here is the **agent number**, not the y-direction. `Fx(j)` = "x-force on agent j."
+Note: in `Fx(j)`, the `j` is the *person's number*, not a y-coordinate.
 
----
-
-## Section 9: Velocity and position update
-
-*Relaxes each agent's velocity toward its desired velocity, adds force-driven acceleration, then moves the agent by velocity × dt.*
+### Step 3: update velocity and position
 
 ```matlab
 tau = 0.5;
@@ -398,36 +428,29 @@ pos(:,1) = pos(:,1) + vel(:,1) * dt;
 pos(:,2) = pos(:,2) + vel(:,2) * dt;
 ```
 
-**Velocity update** — two terms:
+The velocity changes by two things:
 
-$$
-v_\text{new} = v_\text{old} + \underbrace{\frac{v_\text{desired} - v_\text{old}}{\tau}\,dt}_\text{relax to desired} + \underbrace{\frac{F}{80}\,dt}_\text{force acceleration}
-$$
+```
+new velocity = old velocity
+             + (wanted velocity - old velocity) / tau * dt     <- "steer toward what I want"
+             + force / 80 * dt                                 <- "get shoved by others"
+```
 
-1. **`vDesired = dir × v0`** — the velocity the agent *wants* (1.3 m/s in its heading direction).
-2. **`(vDesired - vel)/tau`** — pulls velocity toward desired over `tau = 0.5 s`. Humans take ~0.5 s to adjust speed.
-3. **`Fx * dt/80`** — force divided by effective mass `80` = acceleration, times `dt` = velocity change.
+- **Wanted velocity** = direction arrow x 1.3 m/s.
+- **`tau = 0.5 s`** is the reaction time: people take about half a second to adjust
+  their speed, so they don't change velocity instantly.
+- **`80`** is the person's mass in kg, so `force / 80` is acceleration.
+- Then position moves by `velocity x dt` (distance = speed x time, repeated each step).
 
-**Position update** — basic kinematics:
-
-$$
-x_\text{new} = x_\text{old} + v_x \cdot dt
-$$
-
-Each step (0.05 s), move by `velocity × time`.
-
----
-
-## Section 10: Walls and exit
-
-*Keeps agents inside the room, then removes any agent that has reached the exit.*
+### Step 4: walls and the exit
 
 ```matlab
 pos(:,1) = min(max(pos(:,1), 0.1), L-0.1);
 pos(:,2) = min(max(pos(:,2), 0.1), W-0.1);
 ```
 
-**Wall clamp:** `max(x, 0.1)` prevents going below 0.1; `min(..., L-0.1)` prevents going above 9.9. Agents can't walk through walls — hard clamp, no force.
+Walls are a hard clamp: nobody can go closer than 0.1 m to any wall. There is no
+bounce or force, they just stop.
 
 ```matlab
 reached = pos(:,1) >= L - 0.2;
@@ -439,58 +462,49 @@ if any(reached)
 end
 ```
 
-**Exit removal:** any agent with `x ≥ 9.8` has escaped. Delete its row from all three lists, update `N`.
+Anyone with `x >= 9.8` is considered escaped and is deleted from all three lists.
 
-**Why `L - 0.2`:** a small buffer so agents are clearly past the exit.
+```
+                      exit zone
+                          |
+   .   .   .   .   .  | x >= 9.8   -> removed
+                      |
+```
 
----
+> **Heads-up:** the code only checks `x`, not `y`. So the "exit" is effectively the
+> **entire right wall**, not a door at `y = 5`. People aim at `(10, 5)`, but anyone
+> touching the right side anywhere gets out. If you want a real door, also require
+> something like `abs(pos(:,2) - exitY) < doorWidth/2`.
 
-## Section 11: Metrics (per step)
+### Step 5: measuring the crowd
 
-*Measures crowd speed, fraction stuck, direction alignment, and body compression for this time step.*
-
-### Speed
-
-*Average of every agent's velocity magnitude.*
-
+**Average speed**: how fast is the crowd moving? Low means congested.
 ```matlab
 speeds = sqrt(vel(:,1).^2 + vel(:,2).^2);
 speedHist(k) = mean(speeds);
 ```
 
-Each agent's speed = `√(vx² + vy²)`. Average across all agents = **crowd speed**. Low = congested; high = flowing.
-
-### Restricted fraction
-
-*Fraction of agents moving slower than 20% of desired speed.*
-
+**Restricted fraction**: what share of people are nearly stuck?
 ```matlab
-restrHist(k) = mean(speeds < 0.2*v0);
+restrHist(k) = mean(speeds < 0.2*v0);      % slower than 0.26 m/s
 ```
 
-`0.2 × 1.3 = 0.26 m/s`. Fraction of agents moving slower than 0.26 m/s = **how much of the crowd is nearly stuck**. High = jammed.
-
-### Polarization
-
-*Length of the average unit direction — 1 means aligned, 0 means chaotic.*
-
+**Polarization**: is everyone moving the same way?
 ```matlab
 ux = vel(:,1) ./ (speeds + 1e-9);
 uy = vel(:,2) ./ (speeds + 1e-9);
 polarHist(k) = sqrt(mean(ux)^2 + mean(uy)^2);
 ```
+Turn each velocity into an arrow of length 1, average all the arrows, and take the
+length of the result:
+```
+  everyone going the same way:       going in random directions:
 
-Normalize each velocity to a **unit direction** (`ux, uy`), then average. The **length** of the average direction:
+   -> -> -> -> ->                     ->  <-  ^   v  <-
+   average arrow = long (about 1)     arrows cancel out (about 0)
+```
 
-- ≈ 1 → everyone moving the same way (aligned)
-- ≈ 0 → random directions (chaotic)
-
-This is the standard **polarization order parameter** from flocking physics.
-
-### Compression
-
-*Average body overlap per agent — the crush proxy.*
-
+**Compression**: how squished are people? (the crush proxy)
 ```matlab
 overlap = 0;
 for i = 1:N
@@ -503,16 +517,14 @@ for i = 1:N
 end
 compHist(k) = overlap / max(N, 1);
 ```
-
-For every pair closer than `0.5 m`, add `(0.5 - dd)` = **how much they overlap**. Sum = total body squish. Divide by `N` = **average overlap per agent**.
-
-**This is the crush proxy:** high overlap = bodies compressed = crush risk.
+For every pair of bodies that overlap, add up *how much* they overlap, then divide
+by the number of people.
 
 ---
 
-## Section 12: Final summary
+## 5. Final results
 
-*After 300 steps, stores the headline numbers for this scenario — skipping the first 20 warm-up steps for cleaner averages.*
+After 300 steps we summarize each scenario:
 
 ```matlab
 warmup = min(20, nSteps);
@@ -527,73 +539,59 @@ resultsTable(s,:) = [N0, ...
                      escapedFrac];
 ```
 
-- **`warmup = 20`** — skip the first 20 steps (transient: agents just placed, velocities settling). Average over steps 21–300 for a clean **steady-state** value.
-- **`escapedFrac`** — fraction of the initial crowd that escaped.
-- **`max(compHist)`** — peak compression (worst crush moment matters more than average).
-- `resultsTable` stores 7 numbers per scenario: `[N0, avgSpeed, maxComp, avgPolar, restrictedFrac, density, escapedFrac]`.
+- **Warm-up:** the first 20 steps are skipped because everyone starts at rest and
+  needs a moment to get going. Averaging from step 20 on gives a fairer picture.
+- **`max(compHist)`** uses the *worst* moment, not the average, since a single crush
+  moment is what matters for safety.
+
+The final table prints one row per scenario:
+
+| Column         | Meaning                                        |
+|----------------|------------------------------------------------|
+| `N0`           | starting number of people                      |
+| `Density`      | starting people per m^2                        |
+| `AvgSpeed`     | average crowd speed after warm-up              |
+| `MaxComp`      | worst moment of body overlap (crush proxy)     |
+| `Polarization` | how aligned the crowd's movement is (0 to 1)   |
+| `Restricted%`  | share of people moving very slowly             |
+| `Escaped%`     | share of the crowd that got out                |
+
+What to expect: as the crowd gets denser and more panicked, speed should go down,
+overlap and the stuck fraction should go up, alignment should drop, and fewer
+people should escape within 15 seconds.
 
 ---
 
-## Section 13: Final comparison table
+## Things to know before trusting the numbers
 
-*Prints one row per scenario so you can compare calm, active, and panicked crowds side by side.*
-
-```matlab
-for s = 1:3
-    r = resultsTable(s,:);
-    fprintf('%-12s %6d %8.2f %10.3f %10.3f %12.3f %12.1f %10.1f\n', ...
-        scenarioNames{s}, r(1), r(6), r(2), r(3), r(4), 100*r(5), 100*r(7));
-end
-```
-
-Prints a table comparing all three scenarios:
-
-| Column | Meaning |
-|---|---|
-| `N0` | starting agent count |
-| `Density` | starting agents per m² |
-| `AvgSpeed` | average crowd speed (steady state) |
-| `MaxComp` | peak compression (crush proxy) |
-| `Polarization` | direction alignment (0–1) |
-| `Restricted%` | fraction nearly stuck (×100) |
-| `Escaped%` | fraction that escaped (×100) |
+1. **Rotation bug** in the panic wobble (see above).
+2. **The exit is the whole right wall** (see above).
+3. **Panic never changes.** Each person keeps the same panic for the whole run.
+4. **It's slow for big crowds.** The pair loops check every pair of people, so the
+   work grows with the *square* of the head count. The Erratic scenario (hundreds
+   of people, 300 steps) is much slower than Baseline.
+5. **Fixed seed:** `rng(42)` makes runs repeatable. Change it (or remove it) to see
+   how results vary between random starts.
+6. **Hand-picked constants:** `A_social`, `k_body`, `tau`, mass `80`, and the panic
+   scaling are modeling choices, not measured values.
 
 ---
 
-## The big picture
+## Quick reference
 
-**Physics:** each step, agents
-1. Aim at the exit (unit direction) + panic jitter (rotation)
-2. Push away from nearby agents (linear spring if overlapping, exponential if close)
-3. Relax velocity toward desired + force acceleration
-4. Move by `velocity × dt`
-5. Clamp to walls
-6. Get removed if they reach the exit
-
-**Metrics** measure three failure modes:
-- **Speed / restricted** → is the crowd moving? (flow)
-- **Polarization** → is the crowd coordinated? (behavior)
-- **Compression** → are people squished? (crush)
-
-**Outcome:** `escapedFrac` = did they get out?
-
----
-
-## Quick reference: all formulas
-
-| Formula | Code | Meaning |
-|---|---|---|
-| Unit direction | `toExit / lenExit` | SOHCAHTOA: cos θ, sin θ |
-| Panic jitter | `panic × π × randn` | random rotation angle |
-| Rotation | `x' = cx − sy`, `y' = sx + cy` | angle-addition identities |
-| Body force | `k_body × (2r − dist)` | linear spring when overlapping |
-| Social force | `A_social × exp((2r − dist)/B)` | exponential personal space |
-| Third law | `∓ mag × u` for i, j | equal and opposite |
-| Velocity | `v + (vDes − v)/τ·dt + F/m·dt` | relax + force |
-| Position | `x + v·dt` | Euler integration |
-| Wall clamp | `min(max(x, 0.1), L−0.1)` | hard boundary |
-| Speed | `mean(√(vx² + vy²))` | avg crowd speed |
-| Restricted | `mean(v < 0.2·v0)` | fraction nearly stuck |
-| Polarization | `‖mean(v̂)‖` | direction alignment |
-| Compression | `Σ(2r − d)/N` | avg body overlap = crush proxy |
-| Escape fraction | `(N0 − N)/N0` | outcome |
+| What                | Code                                  | In plain words                         |
+|---------------------|---------------------------------------|----------------------------------------|
+| Direction to exit   | `toExit / lenExit`                    | arrow of length 1 pointing at the exit |
+| Panic wobble        | `panic * pi * randn`                  | random rotation angle                  |
+| Rotation            | `x' = x cos a - y sin a`, `y' = x sin a + y cos a` | spin the arrow         |
+| Body push           | `k_body * (2r - dist)`                | spring when overlapping                |
+| Personal space push | `A_social * exp((2r - dist)/B)`       | fades fast with distance               |
+| Newton's 3rd law    | `-mag*u` on i, `+mag*u` on j          | equal and opposite                     |
+| Velocity update     | `v + (vWant - v)/tau*dt + F/m*dt`     | steer + get shoved                     |
+| Position update     | `x + v*dt`                            | move a little each step                |
+| Wall clamp          | `min(max(x, 0.1), L-0.1)`             | can't leave the room                   |
+| Crowd speed         | `mean(sqrt(vx^2 + vy^2))`             | average speed                          |
+| Restricted          | `mean(speed < 0.2*v0)`                | share nearly stuck                     |
+| Polarization        | `length of mean(unit velocity)`       | alignment, 0 to 1                      |
+| Compression         | `sum(2r - d) / N`                     | average body overlap                   |
+| Escape fraction     | `(N0 - N) / N0`                       | share that got out                     |
