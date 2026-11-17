@@ -247,6 +247,7 @@ dirY = toExitY ./ lenExit;
 ```
 
 Worked example for the person at `(0.31, 1.14)`:
+NOTE: Recall SOHCAHTOA. Also do note that dirX and dirY are unit vectors.
 
 ```
 toExitX = 10 - 0.31 = 9.69
