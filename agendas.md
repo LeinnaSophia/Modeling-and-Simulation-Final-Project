@@ -1,5 +1,10 @@
 # Next Agendas
 
+## TLDR/Expected Deliverables:
+- Working code
+- Pdf for analysis and visualizations
+- Animated simulation
+
 ## 1. Stadium setting with physical barriers
 
 Implement the grid-based model in a more realistic stadium setting by adding physical obstacles along the crowd's path, like a stage.
