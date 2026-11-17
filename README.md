@@ -130,7 +130,7 @@ for i = 1:nx
 end
 ```
 
-Picture one cell with `n = 3`. `rand(n,1)` gives 3 random numbers between 0 and 1,
+Picture one cell with `n = 3`. `rand(n,1)` gives 3 random numbers between 0 and 1 at (1,1) (the starting point or reference point is the origin (0,0)),
 one per person, which we scale to the cell size and shift to the cell's corner:
 
 ```
