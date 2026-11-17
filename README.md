@@ -447,7 +447,7 @@ speedHist(k) = mean(speeds);
 restrHist(k) = mean(speeds < 0.2*v0);      % slower than 0.26 m/s
 ```
 
-**Polarization**: is everyone moving the same way?
+**Polarization**: is everyone moving the same way? 
 ```matlab
 ux = vel(:,1) ./ (speeds + 1e-9);
 uy = vel(:,2) ./ (speeds + 1e-9);
