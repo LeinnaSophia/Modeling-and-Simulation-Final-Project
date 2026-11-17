@@ -2,7 +2,7 @@
 
 ## TLDR/Expected Deliverables:
 - Working code
-- Pdf for analysis and visualizations
+- Pdf for analysis and visualizations. Analyze the different density scenarios. Analyze movement trends and escape/restriction rates. 
 - Animated simulation
 
 ## 1. Stadium setting with physical barriers
