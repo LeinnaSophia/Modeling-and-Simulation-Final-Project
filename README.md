@@ -363,18 +363,8 @@ end
 ```
 
 Case A is like squeezing a spring: the more overlap, the harder it pushes back.
-Case B fades quickly: the force drops to about 37% every additional 0.3 m.
+Case B fades quickly: the force drops.
 
-Calm-crowd force for case B (`A_social = 2`):
-
-```
-  dist (m)   mag
-  0.5        2.00   ########################
-  0.6        1.43   #################
-  0.7        1.03   ############
-  0.8        0.74   #########
-  1.0        0.38   ####
-```
 
 Finally, the two people are pushed in **opposite** directions (Newton's third law). To clear confusion, think i and j as two agents:
 
@@ -382,23 +372,6 @@ Finally, the two people are pushed in **opposite** directions (Newton's third la
 Fx(i) = Fx(i) - mag*ux;   Fy(i) = Fy(i) - mag*uy;   % i is pushed AWAY from j
 Fx(j) = Fx(j) + mag*ux;   Fy(j) = Fy(j) + mag*uy;   % j is pushed AWAY from i
 ```
-
-Example: `i` at `(2, 3)`, `j` at `(2.4, 3)`, panic 0.5:
-
-```
-  i at x=2.0      j at x=2.4
-     o <-0.4-> o
-  dist = 0.4 (overlapping), u = (+1, 0)
-  k_body = 50 * (1 + 2*0.5) = 100
-  mag = 100 * (0.5 - 0.4) = 10
-
-  Fx(i) -= 10   -> i pushed left
-  Fx(j) += 10   -> j pushed right
-
-     <- o       o ->
-```
-
-Reminder: in `Fx(j)`, the `j` is the *person's number*, not a y-coordinate.
 
 ### Step 3: update velocity and position
 
