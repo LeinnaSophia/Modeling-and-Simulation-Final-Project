@@ -553,3 +553,13 @@ people should escape within 15 seconds.
 | Polarization        | `length of mean(unit velocity)`       | alignment, 0 to 1                      |
 | Compression         | `sum(2r - d) / N`                     | average body overlap                   |
 | Escape fraction     | `(N0 - N) / N0`                       | share that got out                     |
+
+---
+
+## Exit Arch simulation
+
+The [`ExitArch/`](ExitArch/) folder has a MATLAB version of the Exit Arch simulation from
+simulateitnow.com. It uses the Helbing social-force model with a real door width, wall and
+door-jamb forces, body friction and a crush-load measure (agenda items 2, 4 and 5). Run
+`exitArchApp` for the interactive version, or `exitArchSweep` for the faster-is-slower plot.
+See [`ExitArch/README.md`](ExitArch/README.md).
