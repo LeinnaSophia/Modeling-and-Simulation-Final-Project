@@ -50,7 +50,7 @@ Both models simulate a 10 m x 10 m room divided into a 10 x 10 grid of 1 m² cel
 
 ### `simple_timeseries.png`
 
-![Simple model metrics over time](figures/simple_timeseries.png)
+![Simple model metrics over time](simple_timeseries.png)
 
 - **Baseline** (blue) walks almost freely. Speed reaches about 1.28 m/s within 2 s and stays there, polarization climbs to about 0.95 (everyone heads to the exit), and the room is empty at about 8.5 s. The drop to zero after that is just "nobody left", not a real speed of 0. The compression spike just before it comes from the last few people bunching up at the exit.
 - **Active** (orange) is held to about 0.4 m/s. About 20–30% of people are nearly stuck, polarization slowly decays from about 0.7 to 0.5, and compression rises steadily. Nobody finishes within 15 s.
@@ -58,7 +58,7 @@ Both models simulate a 10 m x 10 m room divided into a 10 x 10 grid of 1 m² cel
 
 ### `simple_heatmaps.png`
 
-![Simple model heatmaps](figures/simple_heatmaps.png)
+![Simple model heatmaps](simple_heatmaps.png)
 
 Top row is density, bottom row is crush risk. Color scales are shared across the three scenarios in each row.
 
@@ -72,7 +72,7 @@ Top row is density, bottom row is crush risk. Color scales are shared across the
 
 ### `advanced_timeseries_LevelC.png`
 
-![Advanced model metrics over time](figures/advanced_timeseries_LevelC.png)
+![Advanced model metrics over time](advanced_timeseries_LevelC.png)
 
 - **Baseline** (blue) has a low, steady speed (about 0.25–0.3 m/s), almost no overlap or pressure, no casualties, and about 77 people evacuated by 15 s.
 - **Dense** (orange) moves fastest early on (about 0.8 m/s at 2 s), has the highest pressure peak (about 20 at around 1.5 s), then slows and relaxes as the crowd thins. Overlap fades to about 0, there are no casualties, and about 220 people are evacuated, the most of any scenario.
@@ -81,7 +81,7 @@ Top row is density, bottom row is crush risk. Color scales are shared across the
 
 ### `advanced_heatmaps_LevelC.png`
 
-![Advanced model heatmaps](figures/advanced_heatmaps_LevelC.png)
+![Advanced model heatmaps](advanced_heatmaps_LevelC.png)
 
 Green bars mark the exits and the box marks the stage. Both are empty by construction.
 
