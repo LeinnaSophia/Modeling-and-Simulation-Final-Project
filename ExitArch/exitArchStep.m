@@ -22,14 +22,17 @@ end
 X = S.pos(:,1); Y = S.pos(:,2); V = S.vel; r = S.r;
 cMax = 0.45*P.mass/dt;
 
-% --- local density per agent (Gaussian kernel, sigma = 1 m) ---
+% --- local density per agent (grid-based, O(N) instead of O(N^2)) ---
 localDensity = zeros(N, 1);
 if N > 1
-    sigma = 1.0;
-    for i = 1:N
-        dists2 = (X - X(i)).^2 + (Y - Y(i)).^2;
-        localDensity(i) = sum(exp(-dists2 / (2*sigma^2))) / (2*pi*sigma^2);
-    end
+    cellSz = 1.0;
+    nCX = ceil(G.L / cellSz); nCY = ceil(G.H / cellSz);
+    cix = max(1, min(nCX, ceil(X / cellSz)));
+    ciy = max(1, min(nCY, ceil(Y / cellSz)));
+    cellCnt = accumarray([ciy cix], 1, [nCY nCX]);
+    kern = [0.075 0.124 0.075; 0.124 0.206 0.124; 0.075 0.124 0.075];
+    smoothed = conv2(cellCnt, kern, 'same');
+    localDensity = smoothed(sub2ind([nCY nCX], ciy, cix));
 end
 S.localDensity = localDensity;
 
@@ -58,7 +61,7 @@ if N > 1
     dX = X - X.'; dY = Y - Y.';
     D2 = dX.^2 + dY.^2;
     Rs = r + r.';
-    mask = triu(D2 < (Rs + 0.6).^2, 1);
+    mask = triu(D2 < (Rs + 1.0).^2, 1);
     idx = find(mask);
     if ~isempty(idx)
         [I, J] = ind2sub([N N], idx(:));
@@ -106,6 +109,11 @@ for c = 1:size(G.pillars,1)
     [F, load] = obstacleForce(F, load, m, X(m) - pc(1), Y(m) - pc(2), pc(3), r, V, P, cMax);
 end
 
+% --- force cap per agent (CrowdSimulation.m: maxForcePerAgent = 2000) ---
+fMag = sqrt(sum(F.^2, 2));
+tooBig = fMag > P.maxForce;
+if any(tooBig), F(tooBig,:) = F(tooBig,:) .* (P.maxForce./fMag(tooBig)); end
+
 % --- integrate (semi-implicit Euler) ---
 V = V + F/P.mass*dt;
 sp = sqrt(sum(V.^2, 2));
@@ -118,21 +126,87 @@ inRoom = pos(:,1) < G.L;
 pos(inRoom,2) = min(max(pos(inRoom,2), 0.02), G.H - 0.02);
 pos(:,1) = max(pos(:,1), 0.02);
 
+% hard-clamp: push agents out of stage, obstacle, pillar, and funnel
+if P.concertScenario
+    sd = P.stageDepth; sy1 = P.stageYMin; sy2 = P.stageYMax;
+    inside = pos(:,1) < sd & pos(:,2) > sy1 & pos(:,2) < sy2;
+    if any(inside)
+        pos(inside,1) = sd + r(inside)*0.5;
+        V(inside,:) = 0;
+    end
+end
+if P.centralObstacle
+    ox1 = P.obstacleXMin; oy1 = P.obstacleYMin;
+    ox2 = P.obstacleXMax; oy2 = P.obstacleYMax;
+    inside = pos(:,1) > ox1 & pos(:,1) < ox2 & pos(:,2) > oy1 & pos(:,2) < oy2;
+    if any(inside)
+        dL = pos(inside,1) - ox1; dR = ox2 - pos(inside,1);
+        dB = pos(inside,2) - oy1; dT = oy2 - pos(inside,2);
+        [~, side] = min([dL dR dB dT], [], 2);
+        idx = find(inside);
+        for q = 1:numel(idx)
+            switch side(q)
+                case 1, pos(idx(q),1) = ox1 - r(idx(q))*0.5;
+                case 2, pos(idx(q),1) = ox2 + r(idx(q))*0.5;
+                case 3, pos(idx(q),2) = oy1 - r(idx(q))*0.5;
+                case 4, pos(idx(q),2) = oy2 + r(idx(q))*0.5;
+            end
+        end
+        V(inside,:) = 0;
+    end
+end
+if strcmp(P.layout, 'Pillar')
+    px = G.L - P.pillarDist; py = G.H / 2; pr = P.pillarRadius;
+    d = hypot(pos(:,1) - px, pos(:,2) - py);
+    inside = d < pr + r * 0.5;
+    if any(inside)
+        dc = max(d(inside), 1e-6);
+        push = (pr + r(inside)*0.5) ./ dc;
+        pos(inside,1) = px + (pos(inside,1) - px) .* push;
+        pos(inside,2) = py + (pos(inside,2) - py) .* push;
+        V(inside,:) = 0;
+    end
+end
+if strcmp(P.layout, 'Funnel')
+    F = P.funnelLen;
+    doorBot = G.H/2 - P.doorWidth/2;
+    doorTop = G.H/2 + P.doorWidth/2;
+    inRegion = pos(:,1) > G.L - F;
+    if any(inRegion)
+        idx = find(inRegion);
+        t = (pos(idx,1) - (G.L - F)) / F;
+        yLow  = t * doorBot;
+        yHigh = G.H - t * (G.H - doorTop);
+        belowWall = pos(idx,2) < yLow;
+        aboveWall = pos(idx,2) > yHigh;
+        if any(belowWall)
+            bi = idx(belowWall);
+            pos(bi,2) = yLow(belowWall) + r(bi)*0.5;
+            V(bi,:) = 0;
+        end
+        if any(aboveWall)
+            ai = idx(aboveWall);
+            pos(ai,2) = yHigh(aboveWall) - r(ai)*0.5;
+            V(ai,:) = 0;
+        end
+    end
+end
+
 S.t   = S.t + dt;
 S.pos = pos; S.vel = V;
 S.contacts = contacts;
 
 % --- loads, status ---
-S.load = load./(2*pi*r);
-S.everCrushed = S.everCrushed | S.load > P.crushLoad;
-S.peakLoadNow = max(S.load);
+S.load = load;
+S.everCrushed = S.everCrushed | load > P.crushLoad;
+S.peakLoadNow = max(load);
 S.peakLoad = max(S.peakLoad, S.peakLoadNow);
 spd = sqrt(sum(V.^2, 2));
 meanV0 = mean(S.v0);
 st = ones(N,1);
 st(spd < 0.5*meanV0) = 2;
 st(spd < max(0.1*meanV0, 0.05)) = 3;
-st(S.load > P.crushLoad) = 4;
+st(load > P.crushLoad) = 4;
 S.status = st;
 
 % --- exits ---
@@ -146,35 +220,19 @@ if ~isempty(out)
     end
     S.exitTimes = [S.exitTimes; S.t*ones(numel(out),1)];
     S.nCrushedGone = S.nCrushedGone + sum(S.everCrushed(out));
-    if strcmp(P.scenario, 'Steady Stream')
-        keep = true(N,1); keep(out) = false;
-        for q = out.'
-            others = find(keep);
-            S.pos(q,:) = exitArchPlace(G, S.pos(others,:), S.r(others), S.r(q), G.spawnBox, 40);
-            S.vel(q,:) = 0;
-            S.load(q) = 0; S.everCrushed(q) = false; S.status(q) = 1;
-            S.v0(q) = P.v0Min + (P.v0Max - P.v0Min)*rand();
-            S.panic(q) = P.panicMin + (P.panicMax - P.panicMin)*rand();
-            S.tau(q) = 0.5*S.panic(q) + 5.0*(1 - S.panic(q));
-            S.localDensity(q) = 0;
-            keep(q) = true;
-        end
-        S.contacts = S.contacts(~any(ismember(S.contacts(:,1:2), out), 2), :);
-    else
-        keep = true(N,1); keep(out) = false;
-        S.pos = S.pos(keep,:); S.vel = S.vel(keep,:); S.r = S.r(keep);
-        S.load = S.load(keep); S.everCrushed = S.everCrushed(keep); S.status = S.status(keep);
-        S.v0 = S.v0(keep); S.panic = S.panic(keep); S.tau = S.tau(keep);
-        S.localDensity = S.localDensity(keep);
-        newIdx = cumsum(keep);
-        nc = size(S.contacts,1);
-        cKeep = all(reshape(keep(S.contacts(:,1:2)), nc, 2), 2);
-        S.contacts = S.contacts(cKeep,:);
-        S.contacts(:,1:2) = reshape(newIdx(S.contacts(:,1:2)), [], 2);
-        if isempty(S.pos)
-            S.done = true;
-            S.evacTime = S.t;
-        end
+    keep = true(N,1); keep(out) = false;
+    S.pos = S.pos(keep,:); S.vel = S.vel(keep,:); S.r = S.r(keep);
+    S.load = S.load(keep); S.everCrushed = S.everCrushed(keep); S.status = S.status(keep);
+    S.v0 = S.v0(keep); S.panic = S.panic(keep); S.tau = S.tau(keep);
+    S.localDensity = S.localDensity(keep);
+    newIdx = cumsum(keep);
+    nc = size(S.contacts,1);
+    cKeep = all(reshape(keep(S.contacts(:,1:2)), nc, 2), 2);
+    S.contacts = S.contacts(cKeep,:);
+    S.contacts(:,1:2) = reshape(newIdx(S.contacts(:,1:2)), [], 2);
+    if isempty(S.pos)
+        S.done = true;
+        S.evacTime = S.t;
     end
 end
 end
@@ -196,40 +254,30 @@ load(m) = load(m) + P.k*g;
 end
 
 % -------------------------------------------------------------------------
-function E = desiredDirection(X, Y, r, G)
-N = numel(X);
-best = inf(N,1); tx = zeros(N,1); ty = zeros(N,1);
-for k = 1:size(G.doors,1)
-    ylo = G.doors(k,2); yhi = G.doors(k,3); yc = (ylo + yhi)/2;
-    dd = hypot(G.L - X, yc - Y);
-    lo = ylo + r; hi = yhi - r;
-    yt = min(max(Y, lo), hi);
-    yt(lo > hi) = yc;
-    b = dd < best;
-    best(b) = dd(b);
-    tx(b) = G.L + G.wallT;
-    ty(b) = yt(b);
-end
+function E = desiredDirection(X, Y, ~, G)
+res = G.distRes;
+dist = G.distField;
+[gridNy, gridNx] = size(dist);
 
-for c = 1:size(G.pillars,1)
-    pc = G.pillars(c,:);
-    up = X < pc(1);
-    if ~any(up), continue; end
-    sx = tx - X; sy = ty - Y; s2 = sx.^2 + sy.^2;
-    u = min(max(((pc(1) - X).*sx + (pc(2) - Y).*sy)./s2, 0), 1);
-    miss = hypot(X + u.*sx - pc(1), Y + u.*sy - pc(2));
-    blocked = up & miss < pc(3) + r + 0.1;
-    if any(blocked)
-        side = sign(Y(blocked) - pc(2));
-        side(side == 0) = 1;
-        tx(blocked) = pc(1);
-        ty(blocked) = pc(2) + side.*(pc(3) + r(blocked) + 0.25);
-    end
-end
+ix = max(2, min(gridNx-1, ceil(X / res)));
+iy = max(2, min(gridNy-1, ceil(Y / res)));
 
-ex = tx - X; ey = ty - Y;
-past = X > G.L + G.wallT - 0.05;
-ex(past) = 1; ey(past) = 0;
-len = max(hypot(ex, ey), 1e-9);
-E = [ex./len, ey./len];
+gx = dist(sub2ind([gridNy gridNx], iy, ix+1)) ...
+   - dist(sub2ind([gridNy gridNx], iy, ix-1));
+gy = dist(sub2ind([gridNy gridNx], iy+1, ix)) ...
+   - dist(sub2ind([gridNy gridNx], iy-1, ix));
+
+bad = isnan(gx) | isnan(gy) | isinf(gx) | isinf(gy);
+gx(bad) = 1; gy(bad) = 0;
+
+len = max(hypot(gx, gy), 1e-9);
+E = [-gx./len, -gy./len];
+
+past = X > G.exitX - 0.5;
+E(past, 1) = 1;
+E(past, 2) = 0;
+
+unreachable = isinf(dist(sub2ind([gridNy gridNx], iy, ix)));
+E(unreachable, 1) = 1;
+E(unreachable, 2) = 0;
 end

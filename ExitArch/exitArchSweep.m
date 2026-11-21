@@ -22,7 +22,7 @@ rows = {};
 for li = 1:numel(opt.layouts)
     for v0Max = opt.v0MaxList
         for sd = opt.seeds
-            P = exitArchParams('layout', opt.layouts{li}, 'scenario', 'Steady Stream', ...
+            P = exitArchParams('layout', opt.layouts{li}, 'scenario', 'Evacuation', ...
                 'v0Max', v0Max, 'nAgents', opt.nAgents, 'doorWidth', opt.doorWidth, 'seed', sd);
             R = exitArchRun(P, opt.simTime, 'warmup', opt.warmup);
             s = R.summary;
