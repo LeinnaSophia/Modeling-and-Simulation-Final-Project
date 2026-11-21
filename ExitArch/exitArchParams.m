@@ -59,9 +59,6 @@ P.rMax  = 0.30;
 P.vMax  = 3.0;                  % m/s, speed cap
 P.maxForce = 10000;              % N, force cap per agent to prevent blowup
 
-% --- Density-dependent speed (Weidmann 1993) ---
-P.rhoCrit = 5.4;                % ped/m^2 where desired speed drops to 37%
-
 % --- Numerics and measurement ---
 P.dt         = 0.01;           % s, integration step
 P.crushLoad  = 1600;            % N, body-compression force threshold

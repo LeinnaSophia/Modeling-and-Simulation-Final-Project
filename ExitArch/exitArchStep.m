@@ -9,7 +9,7 @@ function S = exitArchStep(S)
 %               + same terms for walls, door jambs and pillars
 %
 %   v0_i and tau_i are per-agent (speed range + panic-based relaxation).
-%   Desired speed reduced by local density (Weidmann 1993).
+%   Slowdown in dense areas is emergent from contact forces, not imposed.
 %   Direction is jittered by panic (Helbing noise term).
 
 P = S.P; G = S.G; dt = P.dt;
@@ -47,12 +47,10 @@ jitteredX = cosA .* E(:,1) - sinA .* E(:,2);
 jitteredY = sinA .* E(:,1) + cosA .* E(:,2);
 E = [jitteredX, jitteredY];
 
-% --- density-dependent desired speed (Weidmann 1993) ---
-% in dense crowds people physically cannot move at their preferred speed
-effectiveSpeed = S.v0 .* exp(-localDensity / P.rhoCrit);
-
 % --- driving force (per-agent speed and tau) ---
-F = P.mass*(effectiveSpeed.*E - V)./S.tau;
+% v0 is the full desired speed; slowdown in dense areas is emergent from
+% contact forces (Helbing 2000), not imposed by Weidmann decay.
+F = P.mass*(S.v0.*E - V)./S.tau;
 load = zeros(N,1);
 
 % --- person-person forces ---
