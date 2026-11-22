@@ -128,37 +128,47 @@ end
 
 % ======================= FIGURE 1: TIME SERIES =======================
 function plotTimeSeries(R, densNames, panicLabels, pal, outDir)
-metrics = {'meanSpeed', 'Avg Speed',      'speed (m/s)'; ...
-           'exited',    'Evacuated',       'cumulative count'; ...
-           'crushed',   'Crushed (live)',   'agent count'; ...
-           'peakLoad',  'Peak Load',       'load (N/m)'};
-nM = size(metrics, 1);
-nD = numel(densNames);
+f = figure('Visible', 'on', 'Color', 'w', 'Units', 'normalized', 'OuterPosition', [0.05 0.05 0.9 0.88]);
+try theme(f, 'light'); catch, end
+tl = tiledlayout(f, 4, 3, 'TileSpacing', 'loose', 'Padding', 'normal');
 
-f = figure('Color', 'w', 'Position', [40 40 380*nD+80 300*nM]);
-for m = 1:nM
-    for d = 1:nD
-        subplot(nM, nD, (m-1)*nD + d); hold on;
+fields = {'meanSpeed', 'exited', 'crushed', 'peakLoad'};
+rowLabels = { ...
+    {'Avg Speed', '(m/s)'}; ...
+    {'Evacuated', '(count)'}; ...
+    {'Crushed (live)', '(agents)'}; ...
+    {'Peak Load', '(N/m)'} ...
+};
+shortUnits = {'m/s', 'count', 'agents', 'N/m'};
+
+for r = 1:4
+    for c = 1:3
+        ax = nexttile(tl); hold(ax, 'on'); grid(ax, 'on');
+        ax.FontSize = 10;
         for p = 1:3
-            ts = R{d, p}.series;
-            plot(ts.t, ts.(metrics{m,1}), 'Color', pal.cat(p,:), 'LineWidth', 1.8);
+            ser = R{c, p}.series;
+            plot(ax, ser.t, ser.(fields{r}), 'LineWidth', 1.6, ...
+                'Color', pal.cat(p,:), 'DisplayName', panicLabels{p});
         end
-        grid on; set(gca, 'GridAlpha', 0.15, 'Box', 'off');
-        xlabel('time (s)'); ylabel(metrics{m,3});
-        if m == 1
-            title(densNames{d}, 'FontWeight', 'bold', 'FontSize', 12);
+        xlim(ax, [0 300]);
+        if r == 1
+            title(ax, densNames{c}, 'FontSize', 12, 'FontWeight', 'bold');
         end
-        if d == 1
-            yl = get(gca, 'YLabel');
-            yl.String = [metrics{m,2} '  —  ' yl.String];
-            yl.FontWeight = 'bold';
+        if c == 1
+            ylabel(ax, rowLabels{r}, 'FontSize', 10, 'FontWeight', 'bold');
+        else
+            ylabel(ax, shortUnits{r}, 'FontSize', 9);
         end
-        if m == 1 && d == nD
-            legend(panicLabels, 'Location', 'best', 'Box', 'off', 'FontSize', 8);
+        if r == 4
+            xlabel(ax, 'Time (s)', 'FontSize', 10);
+        end
+        if r == 1 && c == 3
+            legend(ax, 'Location', 'northeast', 'FontSize', 9);
         end
     end
 end
-sgtitle('ExitArch: evacuation metrics over time', 'FontWeight', 'bold', 'FontSize', 14);
+
+title(tl, 'ExitArch: Evacuation Metrics Over Time', 'FontSize', 14, 'FontWeight', 'bold');
 saveFig(f, outDir, 'exitarch_timeseries');
 end
 
@@ -211,7 +221,6 @@ text(H.L - 0.3, H.H/2, 'EXIT', 'Color', [0 0.5 0], ...
 hold off;
 end
 
-
 % ======================= FIGURE 3: SUMMARY BARS =======================
 function plotSummary(R, densNames, panicNames, pal, outDir)
 nD = numel(densNames); nP = numel(panicNames);
@@ -228,7 +237,8 @@ for d = 1:nD
     end
 end
 
-f = figure('Color', 'w', 'Position', [60 60 1200 380]);
+f = figure('Visible', 'on', 'Color', 'w', 'Position', [60 60 1200 380]);
+try theme(f, 'light'); catch, end
 metrics = {evacTime,     'Evacuation Time (s)',   'time (s)'; ...
            totalCrushed, 'Total Ever Crushed',    'agent count'; ...
            peakLoad,     'Peak Load',             'load (N/m)'};
@@ -236,8 +246,7 @@ for m = 1:3
     subplot(1, 3, m);
     b = bar(metrics{m,1});
     for p = 1:nP
-        b(p).FaceColor = 'flat';
-        b(p).CData = repmat(pal.cat(p,:), nD, 1);
+        b(p).FaceColor = pal.cat(p,:);
     end
     set(gca, 'XTickLabel', densNames, 'Box', 'off');
     ylabel(metrics{m,3}); title(metrics{m,2}, 'FontWeight', 'bold');
