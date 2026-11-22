@@ -1,16 +1,15 @@
 % Visualizations.m -- ExitArch crowd-evacuation metrics & heatmaps
 % Runs all 9 scenario combos (3 density x 3 panic), collects time-series
-% data from exitArchRun, then renders:
+% and spatial data, then renders:
 %   Fig 1: time-series grid  (density cols x metric rows, panic overlaid)
-%   Fig 2: spatial heatmaps  (density & crush-risk at Level C)
+%   Fig 2: spatial heatmaps  (peak density & crush-risk at Level C)
 %   Fig 3: summary bar chart (evac time & total crushed across all combos)
 %
-% Adapted from Nicole's Visualizations.m; Okabe-Ito palette preserved.
 % Run with:  Visualizations
 function Visualizations()
 clc; close all;
 
-simTime = 120;                                    % seconds per run
+simTime = 300;                                    % seconds per run (stops early when empty)
 outDir = fullfile(fileparts(mfilename('fullpath')), 'figures');
 if ~exist(outDir, 'dir'), mkdir(outDir); end
 
@@ -20,12 +19,12 @@ t = linspace(0, 1, 256)';
 pal.density = (1-t)*[247 251 255]/255 + t*[8 48 107]/255;
 pal.crush   = (1-t)*[255 245 240]/255 + t*[103 0 13]/255;
 
-densNames  = {'Baseline', 'Dense', 'Crush Risk'};
+densNames  = {'Baseline', 'Dense', 'High Density'};
 panicNames = {'Level A',  'Level B', 'Level C'};
 panicLabels = {'Level A (0.00-0.49)', 'Level B (0.50-0.79)', 'Level C (0.80-1.00)'};
 
 % ---- run all 9 combos ----
-fprintf('Running 9 scenario combos (%d s each)...\n', simTime);
+fprintf('Running 9 scenario combos (up to %d s each)...\n', simTime);
 R = cell(3, 3);                                   % R{density, panic}
 heatData = cell(3, 3);
 for di = 1:3
@@ -33,9 +32,9 @@ for di = 1:3
         fprintf('  %s + %s ... ', densNames{di}, panicNames{pi});
         P = exitArchParams('densityScenario', densNames{di}, ...
                            'panicLevel', panicNames{pi}, 'seed', 42);
-        result = exitArchRun(P, simTime);
+        [result, H] = collectRunAndHeat(P, simTime);
         R{di, pi} = result;
-        heatData{di, pi} = collectHeat(result.final, P);
+        heatData{di, pi} = H;
         fprintf('done (evac %.1f s, crushed %d)\n', ...
             result.summary.evacTime, result.summary.crushedAgents);
     end
@@ -55,9 +54,11 @@ end
 
 
 % ======================= DATA COLLECTION =======================
-function H = collectHeat(S, P)
-% Spatial density and crush-risk from final sim state's accumulated data.
-% Uses the same grid as the sim (1 m^2 cells).
+function [R, H] = collectRunAndHeat(P, simTime)
+% Runs the simulation and tracks peak spatial density & crush-risk across the
+% evacuation using the same 1 m^2 cell grid (so maps stay populated after exit).
+S = exitArchInit(P);
+P = S.P;                                          % use scaled stage/obstacle coords
 nx = ceil(P.L); ny = ceil(P.H);
 H.density = zeros(ny, nx);
 H.crush   = zeros(ny, nx);
@@ -70,15 +71,58 @@ H.obstacle = [];
 if P.centralObstacle
     H.obstacle = [P.obstacleXMin, P.obstacleYMin, P.obstacleXMax, P.obstacleYMax];
 end
-% accumulate from final state positions
-N = size(S.pos, 1);
-if N > 0
-    cix = max(1, min(nx, ceil(S.pos(:,1))));
-    ciy = max(1, min(ny, ceil(S.pos(:,2))));
-    lin = sub2ind([ny nx], ciy, cix);
-    H.density = reshape(accumarray(lin, 1, [ny*nx 1]), [ny nx]);
-    H.crush   = reshape(accumarray(lin, S.load, [ny*nx 1]), [ny nx]);
+
+sampleEvery = 0.1;
+nMax = floor(simTime/sampleEvery) + 1;
+t = nan(nMax,1); inside = t; exited = t; outflow = t;
+stuckFrac = t; meanSpeed = t; peakLoad = t; crushed = t;
+k = 0; nextSample = 0; maxLoadSeen = 0;
+
+while S.t < simTime - 1e-9 && ~S.done
+    S = exitArchStep(S);
+    maxLoadSeen = max(maxLoadSeen, S.peakLoadNow);
+    if S.t >= nextSample - 1e-9 || S.done
+        k = k + 1;
+        N = size(S.pos, 1);
+        t(k) = S.t; inside(k) = N; exited(k) = numel(S.exitTimes);
+        win = min(P.flowWindow, S.t);
+        outflow(k) = sum(S.exitTimes > S.t - win)/max(win, eps);
+        if N > 0
+            spd = sqrt(sum(S.vel.^2, 2));
+            stuckFrac(k) = mean(S.status == 3 | S.status == 4);
+            meanSpeed(k) = mean(spd);
+            peakLoad(k)  = S.peakLoadNow;
+            crushed(k)   = sum(S.status == 4);
+
+            cix = max(1, min(nx, ceil(S.pos(:,1))));
+            ciy = max(1, min(ny, ceil(S.pos(:,2))));
+            lin = sub2ind([ny nx], ciy, cix);
+            dGrid = reshape(accumarray(lin, 1,      [ny*nx 1]), [ny nx]);
+            cGrid = reshape(accumarray(lin, S.load, [ny*nx 1], @max, 0), [ny nx]);
+            H.density = max(H.density, dGrid);
+            H.crush   = max(H.crush, cGrid);
+        else
+            stuckFrac(k) = 0; meanSpeed(k) = 0; peakLoad(k) = 0; crushed(k) = 0;
+        end
+        nextSample = nextSample + sampleEvery;
+    end
 end
+k = min(k, nMax);
+R.series = table(t(1:k), inside(1:k), exited(1:k), outflow(1:k), stuckFrac(1:k), ...
+    meanSpeed(1:k), peakLoad(1:k), crushed(1:k), 'VariableNames', ...
+    {'t','inside','exited','outflow','stuckFrac','meanSpeed','peakLoad','crushed'});
+
+tEnd = S.t;
+ex = S.exitTimes;
+R.summary.flow = numel(ex)/max(tEnd, eps);
+gaps = diff([0; ex]);
+if isempty(gaps), gaps = tEnd; end
+R.summary.longestStall  = max(gaps);
+R.summary.peakLoad      = maxLoadSeen;
+R.summary.crushedAgents = S.nCrushedGone + sum(S.everCrushed);
+R.summary.evacTime      = S.evacTime;
+R.summary.exited        = numel(S.exitTimes);
+R.final = S;
 end
 
 
@@ -87,7 +131,7 @@ function plotTimeSeries(R, densNames, panicLabels, pal, outDir)
 metrics = {'meanSpeed', 'Avg Speed',      'speed (m/s)'; ...
            'exited',    'Evacuated',       'cumulative count'; ...
            'crushed',   'Crushed (live)',   'agent count'; ...
-           'peakLoad',  'Peak Load',       'force (N)'};
+           'peakLoad',  'Peak Load',       'load (N/m)'};
 nM = size(metrics, 1);
 nD = numel(densNames);
 
@@ -124,8 +168,8 @@ function plotHeatmaps(heatCells, densNames, pal, outDir)
 nD = numel(densNames);
 f = figure('Color', 'w', 'Position', [40 40 400*nD 600]);
 
-rows = {'density', pal.density, 'agents / cell',       'density'; ...
-        'crush',   pal.crush,   'body compression (N)', 'crush risk'};
+rows = {'density', pal.density, 'peak agents / cell',     'density'; ...
+        'crush',   pal.crush,   'peak compression (N/m)', 'crush risk'};
 for r = 1:2
     cmax = max(eps, max(cellfun(@(h) max(h.(rows{r,1})(:)), heatCells)));
     for d = 1:nD
@@ -187,7 +231,7 @@ end
 f = figure('Color', 'w', 'Position', [60 60 1200 380]);
 metrics = {evacTime,     'Evacuation Time (s)',   'time (s)'; ...
            totalCrushed, 'Total Ever Crushed',    'agent count'; ...
-           peakLoad,     'Peak Load',             'force (N)'};
+           peakLoad,     'Peak Load',             'load (N/m)'};
 for m = 1:3
     subplot(1, 3, m);
     b = bar(metrics{m,1});

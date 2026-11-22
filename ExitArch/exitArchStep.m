@@ -8,9 +8,9 @@ function S = exitArchStep(S)
 %               + sum_j  kappa g(r_ij-d_ij) (dv_ji . t_ij) t_ij  body friction
 %               + same terms for walls, door jambs and pillars
 %
-%   v0_i and tau_i are per-agent (speed range + panic-based relaxation).
-%   Slowdown in dense areas is emergent from contact forces, not imposed.
-%   Direction is jittered by panic (Helbing noise term).
+%   with g(x) = max(x,0): the body terms only act when people touch.
+%   Direction finding uses JC's geometric approach (aim at nearest door).
+%   Load is normalized per circumference (N/m) as in JC's implementation.
 
 P = S.P; G = S.G; dt = P.dt;
 N = size(S.pos,1);
@@ -20,9 +20,9 @@ if N == 0
 end
 
 X = S.pos(:,1); Y = S.pos(:,2); V = S.vel; r = S.r;
-cMax = 0.45*P.mass/dt;
+cMax = 0.45*P.mass/dt;   % = 0.45 * 80 / 0.01 = 3600
 
-% --- local density per agent (grid-based, O(N) instead of O(N^2)) ---
+% --- local density per agent (grid-based, for display only) ---
 localDensity = zeros(N, 1);
 if N > 1
     cellSz = 1.0;
@@ -37,10 +37,10 @@ end
 S.localDensity = localDensity;
 
 % --- desired direction toward the exit ---
-E = desiredDirection(X, Y, r, G);
+E = desiredDirection(X, Y, r, G, P);
 
 % panic jitter: rotate desired direction by a random angle scaled by panic
-jitterAngle = S.panic .* pi .* randn(N, 1);
+jitterAngle = S.panic .* 0.25 .* randn(N, 1);
 cosA = cos(jitterAngle);
 sinA = sin(jitterAngle);
 jitteredX = cosA .* E(:,1) - sinA .* E(:,2);
@@ -48,8 +48,6 @@ jitteredY = sinA .* E(:,1) + cosA .* E(:,2);
 E = [jitteredX, jitteredY];
 
 % --- driving force (per-agent speed and tau) ---
-% v0 is the full desired speed; slowdown in dense areas is emergent from
-% contact forces (Helbing 2000), not imposed by Weidmann decay.
 F = P.mass*(S.v0.*E - V)./S.tau;
 load = zeros(N,1);
 
@@ -59,7 +57,7 @@ if N > 1
     dX = X - X.'; dY = Y - Y.';
     D2 = dX.^2 + dY.^2;
     Rs = r + r.';
-    mask = triu(D2 < (Rs + 1.0).^2, 1);
+    mask = triu(D2 < (Rs + 0.6).^2, 1);
     idx = find(mask);
     if ~isempty(idx)
         [I, J] = ind2sub([N N], idx(:));
@@ -106,11 +104,6 @@ for c = 1:size(G.pillars,1)
     if ~any(m), continue; end
     [F, load] = obstacleForce(F, load, m, X(m) - pc(1), Y(m) - pc(2), pc(3), r, V, P, cMax);
 end
-
-% --- force cap per agent (CrowdSimulation.m: maxForcePerAgent = 2000) ---
-fMag = sqrt(sum(F.^2, 2));
-tooBig = fMag > P.maxForce;
-if any(tooBig), F(tooBig,:) = F(tooBig,:) .* (P.maxForce./fMag(tooBig)); end
 
 % --- integrate (semi-implicit Euler) ---
 V = V + F/P.mass*dt;
@@ -166,13 +159,12 @@ if strcmp(P.layout, 'Pillar')
     end
 end
 if strcmp(P.layout, 'Funnel')
-    F = P.funnelLen;
     doorBot = G.H/2 - P.doorWidth/2;
     doorTop = G.H/2 + P.doorWidth/2;
-    inRegion = pos(:,1) > G.L - F;
+    inRegion = pos(:,1) > G.L - P.funnelLen;
     if any(inRegion)
         idx = find(inRegion);
-        t = (pos(idx,1) - (G.L - F)) / F;
+        t = (pos(idx,1) - (G.L - P.funnelLen)) / P.funnelLen;
         yLow  = t * doorBot;
         yHigh = G.H - t * (G.H - doorTop);
         belowWall = pos(idx,2) < yLow;
@@ -194,17 +186,17 @@ S.t   = S.t + dt;
 S.pos = pos; S.vel = V;
 S.contacts = contacts;
 
-% --- loads, status ---
-S.load = load;
-S.everCrushed = S.everCrushed | load > P.crushLoad;
-S.peakLoadNow = max(load);
+% --- loads, status (load normalized per circumference, JC's approach) ---
+S.load = load./(2*pi*r);
+S.everCrushed = S.everCrushed | S.load > P.crushLoad;
+S.peakLoadNow = max(S.load);
 S.peakLoad = max(S.peakLoad, S.peakLoadNow);
 spd = sqrt(sum(V.^2, 2));
 meanV0 = mean(S.v0);
 st = ones(N,1);
 st(spd < 0.5*meanV0) = 2;
 st(spd < max(0.1*meanV0, 0.05)) = 3;
-st(load > P.crushLoad) = 4;
+st(S.load > P.crushLoad) = 4;
 S.status = st;
 
 % --- exits ---
@@ -252,30 +244,57 @@ load(m) = load(m) + P.k*g;
 end
 
 % -------------------------------------------------------------------------
-function E = desiredDirection(X, Y, ~, G)
-res = G.distRes;
-dist = G.distField;
-[gridNy, gridNx] = size(dist);
+function E = desiredDirection(X, Y, r, G, P)
+% Head for the nearest door, aiming at the closest point of the opening
+% that the body fits through. Avoids pillars and central obstacle.
+N = numel(X);
+best = inf(N,1); tx = zeros(N,1); ty = zeros(N,1);
+for k = 1:size(G.doors,1)
+    ylo = G.doors(k,2); yhi = G.doors(k,3); yc = (ylo + yhi)/2;
+    dd = hypot(G.L - X, yc - Y);
+    lo = ylo + r; hi = yhi - r;
+    yt = min(max(Y, lo), hi);
+    yt(lo > hi) = yc;
+    b = dd < best;
+    best(b) = dd(b);
+    tx(b) = G.L + G.wallT;
+    ty(b) = yt(b);
+end
 
-ix = max(2, min(gridNx-1, ceil(X / res)));
-iy = max(2, min(gridNy-1, ceil(Y / res)));
+% pillar avoidance/line-of-sight check
+for c = 1:size(G.pillars,1)
+    pc = G.pillars(c,:);
+    up = X < pc(1);
+    if ~any(up), continue; end
+    sx = tx - X; sy = ty - Y; s2 = sx.^2 + sy.^2;
+    u = min(max(((pc(1) - X).*sx + (pc(2) - Y).*sy)./s2, 0), 1);
+    miss = hypot(X + u.*sx - pc(1), Y + u.*sy - pc(2));
+    blocked = up & miss < pc(3) + r + 0.1;
+    if any(blocked)
+        side = sign(Y(blocked) - pc(2));
+        side(side == 0) = 1;
+        tx(blocked) = pc(1);
+        ty(blocked) = pc(2) + side.*(pc(3) + r(blocked) + 0.25);
+    end
+end
 
-gx = dist(sub2ind([gridNy gridNx], iy, ix+1)) ...
-   - dist(sub2ind([gridNy gridNx], iy, ix-1));
-gy = dist(sub2ind([gridNy gridNx], iy+1, ix)) ...
-   - dist(sub2ind([gridNy gridNx], iy-1, ix));
+% central obstacle avoidance
+if P.centralObstacle
+    ox1 = P.obstacleXMin; oy1 = P.obstacleYMin;
+    ox2 = P.obstacleXMax; oy2 = P.obstacleYMax;
+    ocy = (oy1 + oy2) / 2;
+    behind = X < ox2 & Y > oy1 - r & Y < oy2 + r;
+    if any(behind)
+        side = sign(Y(behind) - ocy);
+        side(side == 0) = 1;
+        tx(behind) = ox2 + 0.3;
+        ty(behind) = ocy + side .* ((oy2 - oy1)/2 + r(behind) + 0.3);
+    end
+end
 
-bad = isnan(gx) | isnan(gy) | isinf(gx) | isinf(gy);
-gx(bad) = 1; gy(bad) = 0;
-
-len = max(hypot(gx, gy), 1e-9);
-E = [-gx./len, -gy./len];
-
-past = X > G.exitX - 0.5;
-E(past, 1) = 1;
-E(past, 2) = 0;
-
-unreachable = isinf(dist(sub2ind([gridNy gridNx], iy, ix)));
-E(unreachable, 1) = 1;
-E(unreachable, 2) = 0;
+ex = tx - X; ey = ty - Y;
+past = X > G.L + G.wallT - 0.05;
+ex(past) = 1; ey(past) = 0;
+len = max(hypot(ex, ey), 1e-9);
+E = [ex./len, ey./len];
 end

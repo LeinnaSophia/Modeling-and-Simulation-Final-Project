@@ -1,15 +1,15 @@
 function S = exitArchInit(P)
 %EXITARCHINIT  Build the room and place the crowd. Returns the sim state S.
 %   Random placement: each agent is placed at a random walkable spot with
-%   overlap checking (JC's approach). Agent count set by density scenario.
+%   overlap checking. Agent count set by density scenario.
 
 if ~isempty(P.seed), rng(P.seed); end
 
 % --- density scenario sets total agent count ---
 switch P.densityScenario
-    case 'Baseline',    P.nAgents = 250;
-    case 'Dense',       P.nAgents = 500;
-    case 'Crush Risk',  P.nAgents = 800;
+    case 'Baseline',    P.nAgents = 288;
+    case 'Dense',       P.nAgents = 384;
+    case 'High Density',  P.nAgents = 460;
 end
 
 % --- panic level sets panic range (independent of density) ---
@@ -37,13 +37,11 @@ if P.centralObstacle
 end
 
 G = buildGeometry(P);
-G = addDistanceField(G, P);
 
-% --- random placement (JC's approach: each agent gets a random walkable spot) ---
-% Leave 1.5 m clear in front of the door so agents flow toward it.
+% --- random placement ---
 N = round(P.nAgents);
 rr = P.rMin + (P.rMax - P.rMin)*rand(N,1);
-placeBox = [0, P.L - 1.5, 0, P.H];
+placeBox = [0, P.L - 0.5, 0, P.H];
 positions = zeros(N, 2);
 for i = 1:N
     positions(i,:) = exitArchPlace(G, positions(1:i-1,:), rr(1:i-1), rr(i), placeBox, 300);
@@ -76,13 +74,11 @@ S.evacTime     = NaN;
 S.initialAgents = N;
 
 % --- lightweight settling: push overlapping agents apart ---
-% Only repulsion + wall forces, no density matrix, no direction-finding.
 settleVel = zeros(N, 2);
-for step = 1:30
+for step = 1:80
     X = S.pos(:,1); Y = S.pos(:,2); rr = S.r;
     Fs = zeros(N, 2);
 
-    % pairwise repulsion (no friction needed during settling)
     if N > 1
         dX = X - X.'; dY = Y - Y.';
         D2 = dX.^2 + dY.^2;
@@ -102,7 +98,6 @@ for step = 1:30
         end
     end
 
-    % wall repulsion
     for ws = 1:size(G.walls, 1)
         w = G.walls(ws,:);
         wax = w(3)-w(1); way = w(4)-w(2); wl2 = wax^2+way^2;
@@ -117,7 +112,6 @@ for step = 1:30
         Fs(m,2) = Fs(m,2) + fn.*(ddy./dc);
     end
 
-    % pillar repulsion
     for pc = 1:size(G.pillars, 1)
         pp = G.pillars(pc,:);
         m = hypot(X-pp(1), Y-pp(2)) < pp(3) + 1.5;
@@ -131,24 +125,20 @@ for step = 1:30
         Fs(m,2) = Fs(m,2) + fn.*(ddy./dc);
     end
 
-    % force cap (like CrowdSimulation.m) to prevent blowup
     fMag = sqrt(sum(Fs.^2, 2));
     big = fMag > 2000;
     if any(big), Fs(big,:) = Fs(big,:) .* (2000./fMag(big)); end
 
-    % damped integration
-    sDt = 0.01;
+    sDt = 0.005;
     settleVel = 0.3*settleVel + Fs/P.mass*sDt;
     sp = sqrt(sum(settleVel.^2, 2));
     fast = sp > 2.0;
     if any(fast), settleVel(fast,:) = settleVel(fast,:)./sp(fast)*2.0; end
     S.pos = S.pos + settleVel*sDt;
 
-    % clamp to room interior
     S.pos(:,1) = max(rr+0.02, min(S.pos(:,1), G.L-0.02));
     S.pos(:,2) = max(rr+0.02, min(S.pos(:,2), G.H-0.02));
 
-    % push out of stage / obstacle
     if P.concertScenario
         sd = P.stageDepth; sy1 = P.stageYMin; sy2 = P.stageYMax;
         ins = S.pos(:,1)<sd & S.pos(:,2)>sy1 & S.pos(:,2)<sy2;
@@ -299,52 +289,4 @@ if hasObstacle
     ox2 = P.obstacleXMax; oy2 = P.obstacleYMax;
     ok = ok & ~(x > ox1 - rr & x < ox2 + rr & y > oy1 - rr & y < oy2 + rr);
 end
-end
-
-% -------------------------------------------------------------------------
-function G = addDistanceField(G, P)
-res = 0.3;
-L = G.L; H = G.H; T = G.wallT;
-xc = res/2 : res : (L + T + 1.5);
-yc = res/2 : res : H;
-nx = numel(xc); ny = numel(yc);
-[XX, YY] = meshgrid(xc, yc);
-
-roomOK = G.walkable(XX, YY, 0);
-doorOK = false(ny, nx);
-for d = 1:size(G.doors, 1)
-    doorOK = doorOK | (XX >= L & YY >= G.doors(d,2) & YY <= G.doors(d,3));
-end
-blocked = ~(roomOK | doorOK);
-
-dist = inf(ny, nx);
-queue = zeros(ny * nx, 2);
-head = 1; tail = 0;
-goalCells = XX > L + T & doorOK;
-[gy, gx] = find(goalCells & ~blocked);
-for k = 1:numel(gy)
-    dist(gy(k), gx(k)) = 0;
-    tail = tail + 1;
-    queue(tail, :) = [gy(k), gx(k)];
-end
-
-dirs = [-1 0; 1 0; 0 -1; 0 1];
-while head <= tail
-    cy = queue(head, 1); cx = queue(head, 2);
-    head = head + 1;
-    for d = 1:4
-        r2 = cy + dirs(d, 1); c2 = cx + dirs(d, 2);
-        if r2 < 1 || r2 > ny || c2 < 1 || c2 > nx, continue; end
-        if blocked(r2, c2), continue; end
-        nd = dist(cy, cx) + 1;
-        if nd < dist(r2, c2)
-            dist(r2, c2) = nd;
-            tail = tail + 1;
-            queue(tail, :) = [r2, c2];
-        end
-    end
-end
-
-G.distField = dist * res;
-G.distRes = res;
 end

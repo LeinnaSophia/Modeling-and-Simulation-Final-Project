@@ -18,18 +18,18 @@ A crowd-evacuation simulation based on the **Social Force Model** (Helbing, Fark
 
 ```
   y
- 10 +------------------------------------------------------+
+ 12 +------------------------------------------------------+
     |  STAGE  |                                        | EXIT
     |  (left  |     walkable area        obstacle      | door
     |  wall)  |                          [-----]       | (right
     |         |                                        | wall)
   0 +------------------------------------------------------+
-    0         ~4.2                                     19    x
+    0         ~3.5                                     22    x
 ```
 
-- **19 × 10 m** (190 m² total, ~155 m² walkable after stage and obstacle)
-- **Stage** on the far left (~22% of room length, spanning middle 66% of height)
-- **Central obstacle** (toggleable, centered at 55% of length)
+- **22 × 12 m** (264 m² total, ~220 m² walkable after stage and obstacle)
+- **Stage** on the far left (~16% of room length, spanning middle 50% of height)
+- **Central obstacle** (toggleable, centered at ~44% of length)
 - **Exit** on the right wall (1.20 m door width by default)
 - Four layout options: **Single Door**, **Pillar**, **Twin Doors**, **Funnel**
 
@@ -49,14 +49,14 @@ m dv/dt = m(v0·e - v)/tau          driving force (want to reach exit)
 
 | Constant | Value | Meaning |
 |----------|-------|---------|
-| `A` | 500 N | Social repulsion strength |
-| `B` | 0.20 m | Social repulsion range |
-| `k` | 15,000 kg/s² | Body compression stiffness |
-| `kappa` | 6,000 kg/(m·s) | Sliding friction |
+| `A` | 2,000 N | Social repulsion strength |
+| `B` | 0.08 m | Social repulsion range |
+| `k` | 60,000 kg/s² | Body compression stiffness (Helbing/2, scaled for concert scenario) |
+| `kappa` | 120,000 kg/(m·s) | Sliding friction |
 | `mass` | 80 kg | Agent mass |
-| `dt` | 0.01 s | Integration time step |
-| `maxForce` | 10,000 N | Force cap per agent (numerical stability) |
-| `crushLoad` | 1,600 N | Force threshold for crush injury |
+| `dt` | 0.005 s | Integration time step |
+| `maxForce` | 50,000 N | Safety-net force cap per agent |
+| `crushLoad` | 2,500 N | Force threshold for crush injury |
 
 **Emergent slowdown**: Agents always push with their full desired speed v0. Slowdown in dense areas is not imposed — it emerges naturally from body compression and friction forces resisting motion, as in Helbing's original model.
 
@@ -72,9 +72,9 @@ m dv/dt = m(v0·e - v)/tau          driving force (want to reach exit)
 
 | Scenario | Agents | Walkable density | Character |
 |----------|--------|-----------------|-----------|
-| Baseline | 250 | ~1.6 ped/m² | Room to move, flow visible |
-| Dense | 500 | ~3.2 ped/m² | Crowded, occasional crush at bottlenecks |
-| Crush Risk | 800 | ~5.2 ped/m² | Dangerous, multiple simultaneous crush events |
+| Baseline | 250 | ~1.1 ped/m² | Room to move, flow visible |
+| Dense | 500 | ~2.3 ped/m² | Crowded, occasional crush at bottlenecks |
+| Crush Risk | 800 | ~3.6 ped/m² | Dangerous, crush events at exit |
 
 ### Panic levels (how hard agents push)
 
@@ -100,7 +100,7 @@ Agents are placed randomly (not grid-based) using `exitArchPlace.m`: each agent 
 |--------|-------------------|
 | **Evacuated** | Agents past the door channel |
 | **Peak load** | All-time maximum body-compression force on any agent |
-| **Crushed** | Agent whose cumulative body-compression force exceeds 1,600 N |
+| **Crushed** | Agent whose body-compression force exceeds 2,500 N (crushLoad) |
 | **Mean speed** | Average velocity magnitude of agents still in the room |
 | **Outflow** | Exits per second over a sliding 5 s window |
 

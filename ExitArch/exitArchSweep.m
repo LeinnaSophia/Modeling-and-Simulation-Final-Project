@@ -9,12 +9,12 @@ function T = exitArchSweep(varargin)
 %                     'v0MaxList', 0.8:0.4:3.6, 'simTime', 60)
 
 opt.layouts    = {'Single Door', 'Pillar'};
-opt.densities  = {'Baseline', 'Dense', 'Crush Risk'};
+opt.densities  = {'Baseline', 'Dense', 'High Density'};
 opt.v0MaxList  = [0.8 1.2 1.6 2.0 2.4 3.0 3.6];
 opt.seeds      = 1:3;
-opt.simTime    = 60;
-opt.warmup     = 10;
-opt.doorWidth  = 1.2;
+opt.simTime    = 300;
+opt.warmup     = 0;
+opt.doorWidth  = 1.0;
 opt.outDir     = fullfile(fileparts(mfilename('fullpath')), 'results');
 for i = 1:2:numel(varargin), opt.(varargin{i}) = varargin{i+1}; end
 
