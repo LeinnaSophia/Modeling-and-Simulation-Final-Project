@@ -46,6 +46,11 @@ hChains = gobjects(3,1);
 for q = 1:3
     hChains(q) = line(ax, NaN, NaN, 'Color', chainCol(q,:), 'LineWidth', 0.8 + 1.2*q);
 end
+
+hStatus = text(ax, 0.012, 0.985, '', 'Units', 'normalized', 'VerticalAlignment', 'top', ...
+    'FontWeight', 'bold', 'FontSize', 11, 'BackgroundColor', 'w', 'Margin', 5, ...
+    'EdgeColor', [0.85 0.85 0.85]);
+
 lh = gobjects(4,1);
 for q = 1:4, lh(q) = patch(ax, NaN, NaN, COL(q,:), 'EdgeColor', 'none'); end
 legend(ax, lh, {'Walking', 'Slowed', 'Stuck', 'Crushed'}, ...
@@ -334,6 +339,8 @@ render();
 
         hInfo.String = sprintf('t = %.1f s   |   evacuated %d   |   peak load %.0f N', ...
             S.t, numel(S.exitTimes), S.peakLoad);
+
+        hStatus.String = statusLabel(S, flow, gapNow, crushedNow);
     end
 
 % ================================================================ widgets
@@ -434,6 +441,29 @@ switch scenario
     case 'Baseline',    t = '~3.0 ped/m^2';
     case 'Dense',       t = '~4.0 ped/m^2';
     case 'High Density',  t = '~5.0 ped/m^2';
+end
+end
+
+function s = statusLabel(S, flow, gapNow, nCrushed)
+N = size(S.pos,1);
+if S.done
+    s = sprintf('EVACUATED IN %.1f s', S.evacTime);
+elseif N == 0
+    s = 'EMPTY';
+elseif isnan(S.lastExit) && S.t < 3
+    s = 'MOVING TO THE DOOR';
+elseif gapNow > 1.0 && nCrushed > 0
+    s = 'LOCKED CRUSH';
+elseif gapNow > 1.0
+    s = 'ARCH BLOCKING THE DOOR';
+elseif nCrushed > 0
+    s = 'CRUSH RISK';
+elseif mean(S.status >= 3) > 0.25
+    s = 'CONGESTED';
+elseif flow > 0
+    s = 'FLOWING';
+else
+    s = 'MOVING TO THE DOOR';
 end
 end
 
