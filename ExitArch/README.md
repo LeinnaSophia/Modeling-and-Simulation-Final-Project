@@ -102,23 +102,23 @@ Arches form because tangential friction (`κ`) lets compressed bodies lean on ea
 
 `Visualizations` runs a fixed-seed (`seed = 42`) factorial benchmark across all 3 density scenarios (`Baseline`, `Dense`, `High Density`) and all 3 panic levels (`Level A`, `Level B`, `Level C`) using the default `Single Door` concert layout (`1.00 m` door, `simTime = 300 s`, stopping early once the room empties) and exports three figures to `figures/` using an Okabe-Ito colorblind-safe palette:
 
-### 1. Evacuation Metrics Over Time
-![app](ExitArch/figures/exitarch_timeseries.png)
+### 1. Evacuation Metrics Over Time (`figures/exitarch_timeseries.png`)
 
+![Evacuation Metrics Over Time](figures/exitarch_timeseries.png)
 
-A `4 × 3` grid tracking **Avg Speed** (`m/s`), **Evacuated** (cumulative count), **Crushed (live)** (active crushed agent count), and **Peak Load** (`N/m`) over time across all 9 combinations. While higher urgency reduces overall clearance time, **Panic Level C** exhibits a concave-up evacuation curve in Dense and High Density scenarios—lagging behind Levels A and B during peak congestion due to exit arching, keeping over 100 agents simultaneously crushed and sustaining peak compression loads of `20,000–35,000 N/m`.
+A `4 × 3` grid tracking **Avg Speed** (`m/s`), **Evacuated** (cumulative count), **Crushed (live)** (active crushed agent count), and **Peak Load** (`N/m`) over time across all 9 combinations[cite: 1]. While higher urgency reduces overall clearance time, **Panic Level C** exhibits a concave-up evacuation curve in Dense and High Density scenarios—lagging behind Levels A and B during peak congestion due to exit arching, keeping over 100 agents simultaneously crushed and sustaining peak compression loads of `20,000–35,000 N/m`[cite: 1].
 
-### 2. Spatial Density & Crush-Risk Heatmaps
-![app](ExitArch/figures/exitarch_heatmaps.png)
+### 2. Spatial Density & Crush-Risk Heatmaps (`figures/exitarch_heatmaps.png`)
 
+![Spatial Density and Crush-Risk Heatmaps](figures/exitarch_heatmaps.png)
 
-Spatial `1 m × 1 m` heatmaps at highest panic (**Level C**) showing peak crowd density (`agents/cell`) and peak circumference-normalized compression (`N/m`) accumulated over the entire evacuation, overlaid with the stage, central obstacle, and exit location. Crowd packing reaches `7–9 agents/cell` immediately upstream of the `1.00 m` exit and along the narrow corridors flanking the central obstacle, where peak crush forces concentrate.
+Spatial `1 m × 1 m` heatmaps at highest panic (**Level C**) showing peak crowd density (`agents/cell`) and peak circumference-normalized compression (`N/m`) accumulated over the entire evacuation, overlaid with the stage, central obstacle, and exit location[cite: 1]. Crowd packing reaches `7–9 agents/cell` immediately upstream of the `1.00 m` exit and along the narrow corridors flanking the central obstacle, where peak crush forces concentrate[cite: 1].
 
-### 3. Scenario Comparison Summary
-![app](ExitArch/figures/exitarch_summary.png)
+### 3. Scenario Comparison Summary (`figures/exitarch_summary.png`)
 
+![Scenario Comparison Summary](figures/exitarch_summary.png)
 
-Grouped bar charts comparing total **Evacuation Time (`s`)**, **Total Ever Crushed** (unique agents exposed to `> 1600 N/m`), and **Peak Load (`N/m`)** across all 9 `(density × panic)` pairs. Higher crowd density consistently increases total evacuation time and peak mechanical load, confirming that controlled movement speeds prevent frictional arching while high panic above `4.0 ped/m²` turns architectural bottlenecks into severe crush hazards.
+Grouped bar charts comparing total **Evacuation Time (`s`)**, **Total Ever Crushed** (unique agents exposed to `> 1600 N/m`), and **Peak Load (`N/m`)** across all 9 `(density × panic)` pairs[cite: 1]. Higher crowd density consistently increases total evacuation time and peak mechanical load, confirming that controlled movement speeds prevent frictional arching while high panic above `4.0 ped/m²` turns architectural bottlenecks into severe crush hazards[cite: 1].
 
 ## Differences from the original web simulation
 
