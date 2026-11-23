@@ -144,8 +144,8 @@ hInfoAPC = uicontrol(tCrowd, 'Style', 'text', 'Units', 'normalized', ...
 % --- controls below info block ---
 addBoldPopup(tCrowd, 0.74, 'Density Scenario:', densityScenarios, ...
     find(strcmp(densityScenarios, P.densityScenario)), @onDensityChange);
-addBoldSlider(tCrowd, 0.56, 'Desired Speed v0:', '(m/s)', ...
-    [0.80 3.00], P.v0Max, '%.2f', @(v) setReset('v0Max', v), false);
+[sV0, hvV0] = addBoldSlider(tCrowd, 0.56, 'Desired Speed v0:', '(m/s)', ...
+    [0.80 4.50], P.v0Max, '%.2f', @(v) setReset('v0Max', v), false);
 addBoldPopup(tCrowd, 0.40, 'Panic Level:', panicLevels, ...
     find(strcmp(panicKeys, P.panicLevel)), @onPanicChange);
 addBoldSlider(tCrowd, 0.22, 'Body Friction Kappa:', '(kg/m s)', ...
@@ -230,6 +230,13 @@ render();
 
     function onPanicChange(v)
         P.panicLevel = panicKeys{v};
+        switch P.panicLevel
+            case 'Level A', P.v0Min = 0.80; P.v0Max = 1.30;
+            case 'Level B', P.v0Min = 1.40; P.v0Max = 2.20;
+            case 'Level C', P.v0Min = 2.80; P.v0Max = 4.00;
+        end
+        sV0.Value   = P.v0Max;
+        hvV0.String = sprintf('%.2f', P.v0Max);
         doReset();
     end
 
@@ -401,7 +408,7 @@ render();
             'Callback', @(src, ~) cb(src.Value));
     end
 
-    function h = addBoldSlider(parent, y, label, unit, lim, val, fmt, cb, live)
+    function [h, hv] = addBoldSlider(parent, y, label, unit, lim, val, fmt, cb, live)
         uicontrol(parent, 'Style', 'text', 'Units', 'normalized', ...
             'Position', [0.06 y+0.10 0.60 0.05], 'String', label, ...
             'HorizontalAlignment', 'left', 'FontSize', 10, ...
@@ -466,4 +473,3 @@ else
     s = 'MOVING TO THE DOOR';
 end
 end
-

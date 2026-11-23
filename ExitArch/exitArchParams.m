@@ -21,7 +21,7 @@ P.panicLevel = 'Level A';      % 'Level A' | 'Level B' | 'Level C'
 
 % --- Crowd defaults (v0 range; nAgents and panic overridden in init) ---
 P.v0Min    = 0.80;              % m/s, Weidmann 1993 free-flow range
-P.v0Max    = 1.80;              % m/s (adjustable via slider)
+P.v0Max    = 1.30;              % m/s (adjustable via slider)
 P.nAgents  = 288;               % overridden per scenario
 P.kappa    = 2.4e5;             % body (sliding) friction, kg/(m s) (from Helbing)
 P.panicMin = 0.0;

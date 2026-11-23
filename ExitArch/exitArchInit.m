@@ -12,7 +12,7 @@ switch P.densityScenario
     case 'High Density',  P.nAgents = 460;
 end
 
-% --- panic level sets panic range (independent of density) ---
+% --- panic level sets panic range AND scales desired speed (Faster-is-Slower) ---
 switch P.panicLevel
     case 'Level A', P.panicMin = 0.0;  P.panicMax = 0.49;
     case 'Level B', P.panicMin = 0.50; P.panicMax = 0.79;
@@ -55,7 +55,7 @@ S.vel = zeros(N,2);
 
 S.v0    = P.v0Min + (P.v0Max - P.v0Min)*rand(N,1);
 S.panic = P.panicMin + (P.panicMax - P.panicMin)*rand(N,1);
-S.tau   = 0.5 * S.panic + 5.0 * (1 - S.panic);
+S.tau   = 0.5 * S.panic + 1.5 * (1 - S.panic);   % 0.5 s (panic) to 1.5 s (calm)
 
 S.t            = 0;
 S.exitTimes    = zeros(0,1);

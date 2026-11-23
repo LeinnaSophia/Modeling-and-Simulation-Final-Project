@@ -22,6 +22,7 @@ pal.crush   = (1-t)*[255 245 240]/255 + t*[103 0 13]/255;
 densNames  = {'Baseline', 'Dense', 'High Density'};
 panicNames = {'Level A',  'Level B', 'Level C'};
 panicLabels = {'Level A (0.00-0.49)', 'Level B (0.50-0.79)', 'Level C (0.80-1.00)'};
+v0Ranges   = [0.80 1.30; 1.40 2.20; 2.80 4.00];   % matches Panic Level presets in exitArchApp
 
 % ---- run all 9 combos ----
 fprintf('Running 9 scenario combos (up to %d s each)...\n', simTime);
@@ -31,7 +32,9 @@ for di = 1:3
     for pi = 1:3
         fprintf('  %s + %s ... ', densNames{di}, panicNames{pi});
         P = exitArchParams('densityScenario', densNames{di}, ...
-                           'panicLevel', panicNames{pi}, 'seed', 42);
+                           'panicLevel', panicNames{pi}, ...
+                           'v0Min', v0Ranges(pi,1), 'v0Max', v0Ranges(pi,2), ...
+                           'seed', 42);
         [result, H] = collectRunAndHeat(P, simTime);
         R{di, pi} = result;
         heatData{di, pi} = H;
